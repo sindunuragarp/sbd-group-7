@@ -74,8 +74,9 @@ object WordFreqCounts {
   }
 
   def writeToFile(content: Iterable[Tuple2[String,Iterable[String]]], filePath: String): Unit = {
-    new File("output").mkdirs
-    val pw = new java.io.PrintWriter(new File(filePath))
+    val outDir = "output"
+    new File(outDir).mkdirs
+    val pw = new java.io.PrintWriter(new File(outDir + "/" + filePath))
 
     try {
       content.foreach(word => {
