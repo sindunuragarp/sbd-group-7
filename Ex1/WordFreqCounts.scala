@@ -35,25 +35,29 @@ object WordFreqCounts {
   def extractWords(inputFile: String): Unit = {
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
-    val rdd_text = sc.textFile(inputFile)
-    val words = rdd_text
+    val rddText = sc.textFile(inputFile)
+    val words = rddText
       .map("." + _)
       .map(_.toLowerCase)
       .map(_.replaceAll("""\n\r""","."))
       .flatMap(x => wordRegex.findAllIn(x))
 
-    writeToFile(words.collect(), "freq.txt")
+    val wordsNext = words.map(_.drop(1))
+    val wordsPrev = words.map(_.dropRight(1))
+    val wordPairs = wordsNext.zip(wordsPrev)
+
+    writeToFile(wordPairs.collect(), "freq.txt")
   }
 
   ////
 
-  def writeToFile(content: Array[String], filePath: String): Unit = {
+  def writeToFile(content: Array[Tuple2[String,String]], filePath: String): Unit = {
     new File("output").mkdirs
     val pw = new java.io.PrintWriter(new File(filePath))
 
     try {
-      pw.write("Word\n")
-      content.foreach(line => pw.write(line + "\n"))
+      pw.write("Word, Prev\n")
+      content.foreach(line => pw.write(line._1 + "," + line._2 + "\n"))
     }
     finally {
       pw.close
