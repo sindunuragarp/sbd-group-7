@@ -24,7 +24,7 @@ object WordFreqCounts {
 
     // Run and time program
 		val t0 = System.currentTimeMillis
-    extractWords(inputFile)
+    countWords(inputFile)
 		val et = (System.currentTimeMillis - t0) / 1000
 
     System.err.println("Done!\nTime taken = %d mins %d secs".format(et / 60, et % 60))
@@ -32,15 +32,17 @@ object WordFreqCounts {
 
   ////
 
-  def extractWords(inputFile: String): Unit = {
+  def countWords(inputFile: String): Unit = {
+
+    // Custom regex for splitting text into words (as defined) and non words
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
     // Read file and split text into words
     val rddText = sc.textFile(inputFile)
     val words = rddText
-      .map("." + _)
       .map(_.toLowerCase)
       .map(_.replaceAll("""\n\r""","."))
+      .map("." + _)
       .flatMap(x => wordRegex.findAllIn(x))
 
     // Transform as pairs of current and previous word
@@ -54,13 +56,15 @@ object WordFreqCounts {
       .filter(x => isWord(x._1))
       .groupBy(_._1)
       .sortBy(x => (x._2.size * -1, x._1))
-      .map(group => (
-        group._1 + ":" + group._2.size,
-        group._2
+      .map(groupCurr => (
+        groupCurr._1 + ":" + groupCurr._2.size,
+        groupCurr._2
           .filter(x => isWord(x._2))
           .groupBy(_._2)
           .toList.sortBy(x => (x._2.size * -1, x._1))
-          .map(x => x._1 + ":" + x._2.size)
+          .map(groupPrev =>
+            groupPrev._1 + ":" + groupPrev._2.size
+          )
       ))
 
     // Write to output
@@ -76,18 +80,18 @@ object WordFreqCounts {
   def writeToFile(content: Iterable[Tuple2[String,Iterable[String]]], filePath: String): Unit = {
     val outDir = "output"
     new File(outDir).mkdirs
-    val pw = new java.io.PrintWriter(new File(outDir + "/" + filePath))
+    val writer = new java.io.PrintWriter(new File(outDir + "/" + filePath))
 
     try {
-      content.foreach(word => {
-        pw.write(word._1 + "\n")
-        word._2.foreach(prevWord => {
-          pw.write("\t" + prevWord + "\n")
+      content.foreach(currWord => {
+        writer.write(currWord._1 + "\n")
+        currWord._2.foreach(prevWord => {
+          writer.write("\t" + prevWord + "\n")
         })
       })
     }
     finally {
-      pw.close
+      writer.close
     }
   }
 }
