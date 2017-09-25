@@ -53,13 +53,13 @@ object WordFreqCounts {
     val wordsCount = wordPairs
       .groupBy(_._1)
       .filter(x => isWord(x._1))
-      .sortBy(_._2.size)
+      .sortBy(_._2.size * -1)
       .map(group => (
         group._1 + ":" + group._2.size,
         group._2
           .groupBy(_._2)
           .filter(x => isWord(x._1))
-          .toList.sortBy(_._2.size)
+          .toList.sortBy(_._2.size * -1)
           .map(x => x._1 + ":" + x._2.size)
       ))
 
