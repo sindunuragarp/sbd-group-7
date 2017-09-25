@@ -42,8 +42,8 @@ object WordFreqCounts {
       .map(_.replaceAll("""\n\r""","."))
       .flatMap(x => wordRegex.findAllIn(x))
 
-    val wordsNext = words.map(_.drop(1))
-    val wordsPrev = words.map(_.dropRight(1))
+    val wordsNext = words.drop(1)
+    val wordsPrev = words.dropRight(1)
     val wordPairs = wordsNext.zip(wordsPrev)
 
     writeToFile(wordPairs.collect(), "freq.txt")
