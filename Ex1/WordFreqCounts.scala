@@ -52,10 +52,12 @@ object WordFreqCounts {
     // Group words to count occurences
     val wordsCount = wordPairs
       .groupBy(x => x._1)
+      .filter(x => isWord(x._1))
       .map(currGroup => (
         currGroup._1,
         currGroup._2
           .groupBy(x => x._2)
+          .filter(x => isWord(x._1))
           .map(x => x._1 + ":" + x._2.size)
       ))
 
@@ -65,15 +67,19 @@ object WordFreqCounts {
 
   ////
 
+  def isWord(text: String): Boolean = {
+    return text.charAt(0).isLetter
+  }
+
   def writeToFile(content: Iterable[Tuple2[String,Iterable[String]]], filePath: String): Unit = {
     new File("output").mkdirs
     val pw = new java.io.PrintWriter(new File(filePath))
 
     try {
       content.foreach(word => {
-        pw.write(word._1 + "\n")
+        pw.write(word._1 + ":" + word._2.size + "\n")
         word._2.foreach(prevWord => {
-          pw.write(prevWord + "\n")
+          pw.write("\t" + prevWord + "\n")
         })
       })
     }
