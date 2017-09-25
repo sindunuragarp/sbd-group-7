@@ -9,8 +9,8 @@ import org.apache.commons.lang3.StringUtils
 
 object WordFreqCounts {
 
-  val conf = new SparkConf().setAppName("WordFreqCounts")
-  val sc = new SparkContext(conf)
+  private val conf: SparkConf = new SparkConf().setAppName("WordFreqCounts")
+  private val sc: SparkContext = new SparkContext(conf)
 
   def main(args: Array[String]): Unit = {
 
@@ -33,12 +33,13 @@ object WordFreqCounts {
   ////
 
   def extractWords(inputFile: String): Unit = {
-    val wordRegex = "([a-zA-Z][\\w']*-?[a-zA-Z]+|[a-zA-Z])|([^\\sa-zA-Z])+".r()
+    val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
     val rdd_text = sc.textFile(inputFile)
     val words = rdd_text
+      .map("." + _)
       .map(_.toLowerCase)
-      .map(_.replace("\n","."))
+      .map(_.replaceAll("""\n\r""","."))
       .flatMap(x => wordRegex.findAllIn(x))
 
     writeToFile(words.collect(), "freq.txt")
