@@ -54,7 +54,7 @@ object WordFreqCounts {
       .groupBy(x => x._1)
       .filter(x => isWord(x._1))
       .map(currGroup => (
-        currGroup._1,
+        currGroup._1 + ":" + currGroup._2.size,
         currGroup._2
           .groupBy(x => x._2)
           .filter(x => isWord(x._1))
@@ -77,7 +77,7 @@ object WordFreqCounts {
 
     try {
       content.foreach(word => {
-        pw.write(word._1 + ":" + word._2.size + "\n")
+        pw.write(word._1 + "\n")
         word._2.foreach(prevWord => {
           pw.write("\t" + prevWord + "\n")
         })
