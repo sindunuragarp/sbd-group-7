@@ -33,7 +33,7 @@ object WordFreqCounts {
   ////
 
   def extractWords(inputFile: String): Unit = {
-    val wordRegex = "([a-zA-Z][\\w']*-?[a-zA-Z]|[a-zA-Z])|([^\\sa-zA-Z])+".r()
+    val wordRegex = "([a-zA-Z][\\w']*-?[a-zA-Z]+|[a-zA-Z])|([^\\sa-zA-Z])+".r()
 
     val rdd_text = sc.textFile(inputFile)
     val words = rdd_text
