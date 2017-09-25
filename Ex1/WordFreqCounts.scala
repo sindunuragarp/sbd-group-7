@@ -35,6 +35,7 @@ object WordFreqCounts {
   def extractWords(inputFile: String): Unit = {
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
+    // Read file and split text into words
     val rddText = sc.textFile(inputFile)
     val words = rddText
       .map("." + _)
@@ -42,23 +43,39 @@ object WordFreqCounts {
       .map(_.replaceAll("""\n\r""","."))
       .flatMap(x => wordRegex.findAllIn(x))
 
+    // Transform as pairs of current and previous word
     val wordsSize = words.count()
-    val wordsNext = words.zipWithIndex().filter(x => x._2 != 0).map(_._1)
+    val wordsCurr = words.zipWithIndex().filter(x => x._2 != 0).map(_._1)
     val wordsPrev = words.zipWithIndex().filter(x => x._2 != wordsSize-1).map(_._1)
-    val wordPairs = wordsNext.zip(wordsPrev)
+    val wordPairs = wordsCurr.zip(wordsPrev)
 
-    writeToFile(wordPairs.collect(), "freq.txt")
+    // Group words to count occurences
+    val wordsCount = wordPairs
+      .groupBy(x => x._1)
+      .map(currGroup => (
+        currGroup._1,
+        currGroup._2
+          .groupBy(x => x._2)
+          .map(x => x._1 + ":" + x._2.size)
+      ))
+
+    // Write to output
+    writeToFile(wordsCount.collect(), "freq.txt")
   }
 
   ////
 
-  def writeToFile(content: Array[Tuple2[String,String]], filePath: String): Unit = {
+  def writeToFile(content: Iterable[Tuple2[String,Iterable[String]]], filePath: String): Unit = {
     new File("output").mkdirs
     val pw = new java.io.PrintWriter(new File(filePath))
 
     try {
-      pw.write("Word, Prev\n")
-      content.foreach(line => pw.write(line._1 + "," + line._2 + "\n"))
+      content.foreach(word => {
+        pw.write(word._1 + "\n")
+        word._2.foreach(prevWord => {
+          pw.write(prevWord + "\n")
+        })
+      })
     }
     finally {
       pw.close
