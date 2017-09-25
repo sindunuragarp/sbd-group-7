@@ -33,14 +33,15 @@ object WordFreqCounts {
   ////
 
   def extractWords(inputFile: String): Unit = {
-    val wordRegex = "[a-zA-Z]\*[a-zA-Z]".r()
 
-    val rdd_text = sc.textfile(inputFile)
+    val rdd_text = sc.textFile(inputFile)
     val words = rdd_text
-      .map(x => x.split(" "))
       .map(_.toLowerCase)
+      .flatMap(x => x.split(" "))
 
-    writeToFile(words, "freq.txt")
+    val wordRegex = "[a-zA-Z].*[a-zA-Z]".r()
+
+    writeToFile(words.collect(), "freq.txt")
   }
 
   ////
