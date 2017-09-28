@@ -42,17 +42,17 @@ object WordFreqCounts {
     val rddLines = sc.textFile(inputFile)
       .flatMap(x => x.split("""\n\r"""))
 
-    // Split each line into individual words
+    // Split each line into individual words according to the word regex
     val words = rddLines
       .map(_.toLowerCase)
       .map("." + _)
       .flatMap(x => wordRegex.findAllIn(x));
 
-    // Transform as pairs of current and previous word then convert into tuple format
+    // Transform as pairs of current and previous word, then convert into tuple format
     val wordPairs = words.sliding(2)
       .map(x => ( (x(0),x(1)), 1 ))
 
-    // Reduce by pairs to get frequency of prev word
+    // Reduce by key to get frequency of pairs
     val pairsFreq = wordPairs
       .filter(x => isWord(x._1._1))
       .reduceByKey(_ + _)
@@ -67,7 +67,7 @@ object WordFreqCounts {
       .filter(x => isWord(x._1._2))
       .map(x => ( x._1._1, (x._1._2, x._2) ))
 
-    // Join by curr word to get combined count
+    // Combine frequency of curr and prev word for printing
     val wordsCount = currWordsFreq.cogroup(prevWordsFreq)
 
     // Write to output
