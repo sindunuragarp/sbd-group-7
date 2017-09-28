@@ -1,6 +1,7 @@
 // sbt assembly help: https://sparkour.urizone.net/recipes/building-sbt/
 import org.apache.spark._
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
 import java.io._
@@ -46,10 +47,7 @@ object WordFreqCounts {
       .flatMap(x => wordRegex.findAllIn(x))
 
     // Transform as pairs of current and previous word
-    val wordsSize = words.count()
-    val wordsCurr = words.zipWithIndex().filter(x => x._2 != 0).map(_._1)
-    val wordsPrev = words.zipWithIndex().filter(x => x._2 != wordsSize-1).map(_._1)
-    val wordPairs = wordsCurr.zip(wordsPrev)
+    val wordPairs = words.sliding(2).map(x => (x(0),x(1)))
 
     // Group words to count occurences
     val wordsCount = wordPairs
