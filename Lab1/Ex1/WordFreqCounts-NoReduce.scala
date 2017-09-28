@@ -38,39 +38,32 @@ object WordFreqCounts {
     // Custom regex for splitting text into words (as defined) and non words
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
-    // Read file and split text into lines
-    val rddLines = sc.textFile(inputFile)
-      .flatMap(x => x.split("""\n\r"""))
-
-    // Split each line into individual words
-    val words = rddLines
+    // Read file and split text into words
+    val rddText = sc.textFile(inputFile)
+    val words = rddText
       .map(_.toLowerCase)
+      .map(_.replaceAll("""\n\r""","."))
       .map("." + _)
-      .flatMap(x => wordRegex.findAllIn(x));
+      .flatMap(x => wordRegex.findAllIn(x))
 
-    // Transform as pairs of current and previous word then convert into tuple format
-    val wordPairs = words.sliding(2)
-      .map(x => ( (x(0),x(1)), 1 ))
+    // Transform as pairs of current and previous word
+    val wordPairs = words.sliding(2).map(x => (x(0),x(1)))
 
-    // Reduce by pairs to get frequency of prev word
-    val pairsFreq = wordPairs
-      .filter(x => isWord(x._1._1))
-      .reduceByKey(_ + _)
-      .sortBy(_._2)
-
-    // Reduce by first word to get frequency of curr word
-    val currWordsFreq = pairsFreq
-      .map(x => ((x._1._1),x._2))
-      .reduceByKey(_ + _)
-      .sortBy(_._2)
-
-    // Filter non words to get frequency of prev word
-    val prevWordsFreq = pairsFreq
-      .filter(x => isWord(x._1._2))
-      .map(x => ( x._1._1, (x._1._2, x._2) ))
-
-    // Join by curr word to get combined count
-    val wordsCount = currWordsFreq.cogroup(prevWordsFreq)
+    // Group words to count occurences
+    val wordsCount = wordPairs
+      .filter(x => isWord(x._1))
+      .groupBy(_._1)
+      .sortBy(x => (x._2.size * -1, x._1))
+      .map(groupCurr => (
+        groupCurr._1 + ":" + groupCurr._2.size,
+        groupCurr._2
+          .filter(x => isWord(x._2))
+          .groupBy(_._2)
+          .toList.sortBy(x => (x._2.size * -1, x._1))
+          .map(groupPrev =>
+            groupPrev._1 + ":" + groupPrev._2.size
+          )
+      ))
 
     // Write to output
     writeToFile(wordsCount.collect(), "freq.txt")
@@ -82,16 +75,16 @@ object WordFreqCounts {
     return text.charAt(0).isLetter
   }
 
-  def writeToFile(content: Iterable[(String, (Iterable[Int], Iterable[(String, Int)]))], filePath: String): Unit = {
+  def writeToFile(content: Iterable[Tuple2[String,Iterable[String]]], filePath: String): Unit = {
     val outDir = "output"
     new File(outDir).mkdirs
     val writer = new java.io.PrintWriter(new File(outDir + "/" + filePath))
 
     try {
       content.foreach(currWord => {
-        writer.write(currWord._1 + currWord._2._1.head + "\n")
-        currWord._2._2.foreach(prevWord => {
-          writer.write("\t" + prevWord._1 + ":" + prevWord._2 + "\n")
+        writer.write(currWord._1 + "\n")
+        currWord._2.foreach(prevWord => {
+          writer.write("\t" + prevWord + "\n")
         })
       })
     }
