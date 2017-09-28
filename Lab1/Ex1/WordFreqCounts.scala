@@ -56,13 +56,11 @@ object WordFreqCounts {
     val pairsFreq = wordPairs
       .filter(x => isWord(x._1._1))
       .reduceByKey(_ + _)
-      .sortBy(_._2)
 
     // Reduce by first word to get frequency of curr word
     val currWordsFreq = pairsFreq
-      .map(x => ((x._1._1),x._2))
+      .map(x => (x._1._1,x._2))
       .reduceByKey(_ + _)
-      .sortBy(_._2)
 
     // Filter non words to get frequency of prev word
     val prevWordsFreq = pairsFreq
@@ -88,15 +86,19 @@ object WordFreqCounts {
     val writer = new java.io.PrintWriter(new File(outDir + "/" + filePath))
 
     try {
-      content.foreach(currWord => {
-        writer.write(currWord._1 + currWord._2._1.head + "\n")
-        currWord._2._2.foreach(prevWord => {
-          writer.write("\t" + prevWord._1 + ":" + prevWord._2 + "\n")
+      content
+        .toList.sortBy(x => (x._2._1.head * -1, x._1))
+        .foreach(currWord => {
+          writer.write(currWord._1 + ":" + currWord._2._1.head + "\n")
+          currWord._2._2
+            .toList.sortBy(x => (x._2 * -1, x._1))
+            .foreach(prevWord => {
+              writer.write("\t" + prevWord._1 + ":" + prevWord._2 + "\n")
+            })
         })
-      })
     }
     finally {
-      writer.close
+      writer.close()
     }
   }
 }
