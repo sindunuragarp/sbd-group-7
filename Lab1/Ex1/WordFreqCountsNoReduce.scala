@@ -8,7 +8,7 @@ import java.io._
 import java.util.Locale
 import org.apache.commons.lang3.StringUtils
 
-object WordFreqCounts {
+object WordFreqCountsNoReduce {
 
   private val conf: SparkConf = new SparkConf().setAppName("WordFreqCounts")
   private val sc: SparkContext = new SparkContext(conf)
