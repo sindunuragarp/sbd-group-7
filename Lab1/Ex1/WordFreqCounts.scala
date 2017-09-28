@@ -20,8 +20,8 @@ object WordFreqCounts {
 		println("Input file: " + inputFile)
 
 		// Uncomment these two lines if you want to see a less verbose messages from Spark
-		Logger.getLogger("org").setLevel(Level.OFF);
-		Logger.getLogger("akka").setLevel(Level.OFF);
+		Logger.getLogger("org").setLevel(Level.OFF)
+		Logger.getLogger("akka").setLevel(Level.OFF)
 
     // Run and time program
 		val t0 = System.currentTimeMillis
