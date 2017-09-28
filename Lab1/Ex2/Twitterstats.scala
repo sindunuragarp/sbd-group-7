@@ -18,15 +18,13 @@ import org.w3c.dom.Document
 
 // Check example https://github.com/apache/bahir/blob/master/streaming-twitter/examples/src/main/scala/org/apache/spark/examples/streaming/twitter/TwitterPopularTags.scala
 
-object Twitterstats
-{ 
-	def getTimeStamp() : String =
-	{
+object Twitterstats {
+
+	def getTimeStamp() : String = {
 		return new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime())
 	}
 	
-	def getLang(s: String) : String =
-	{
+	def getLang(s: String) : String = {
 		val inputStr = s.replaceFirst("RT", "").replaceAll("@\\p{L}+", "").replaceAll("https?://\\S+\\s?", "")
 		var langCode = new LanguageIdentifier(inputStr).getLanguage
 		
@@ -44,13 +42,11 @@ object Twitterstats
 		return langCode
 	}
   
-	def getLangNameFromCode(code: String) : String =
-	{
+	def getLangNameFromCode(code: String) : String = {
 		return new Locale(code).getDisplayLanguage(Locale.ENGLISH)
 	}
   
-	def main(args: Array[String])
-	{
+	def main(args: Array[String]): Unit = {
 		val file = new File("cred.xml")
 		val documentBuilderFactory = DocumentBuilderFactory.newInstance
 		val documentBuilder = documentBuilderFactory.newDocumentBuilder
