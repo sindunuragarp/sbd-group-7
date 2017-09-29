@@ -38,9 +38,8 @@ object WordFreqCounts {
     // Custom regex for splitting text into words (as defined) and non words
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
-    // Read file and split text into lines
+    // Read file
     val rddLines = sc.textFile(inputFile)
-      .flatMap(x => x.split("""\n\r"""))
 
     // Split each line into individual words according to the word regex
     val words = rddLines
@@ -50,7 +49,7 @@ object WordFreqCounts {
 
     // Transform as pairs of current and previous word, then convert into tuple format
     val wordPairs = words.sliding(2)
-      .map(x => ( (x(0),x(1)), 1 ))
+      .map(x => ( (x(1),x(0)), 1 ))
 
     // Reduce by key to get frequency of pairs
     val pairsFreq = wordPairs
