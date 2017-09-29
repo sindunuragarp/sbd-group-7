@@ -38,35 +38,42 @@ object WordFreqCounts {
     // Custom regex for splitting text into words (as defined) and non words
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
-    // Read file
-    val rddLines = sc.textFile(inputFile)
+    // Read input file
+    // texts = (line)
+    val texts = sc.textFile(inputFile)
 
     // Split each line into individual words according to the word regex
-    val words = rddLines
+    // words = (word)
+    val words = texts
       .map(_.toLowerCase)
       .map("." + _)
       .flatMap(x => wordRegex.findAllIn(x));
 
     // Transform as pairs of current and previous word, then convert into tuple format
+    // wordPairs = ((word, preceded word))
     val wordPairs = words.sliding(2)
       .map(x => ( (x(1),x(0)), 1 ))
 
     // Reduce by key to get frequency of pairs
+    // pairsFreq = ((word, preceded word), frequency)
     val pairsFreq = wordPairs
       .filter(x => isWord(x._1._1))
       .reduceByKey(_ + _)
 
     // Reduce by first word to get frequency of curr word
+    // currWordsFreq = (word, frequency)
     val currWordsFreq = pairsFreq
       .map(x => (x._1._1,x._2))
       .reduceByKey(_ + _)
 
     // Filter non words to get frequency of prev word
+    // prevWordsFreq = (word, (previous word, frequency)
     val prevWordsFreq = pairsFreq
       .filter(x => isWord(x._1._2))
       .map(x => ( x._1._1, (x._1._2, x._2) ))
 
     // Combine frequency of curr and prev word for printing
+    // wordsCount = (word, (frequency of the word, (previous word, frequency of previous word))
     val wordsCount = currWordsFreq.cogroup(prevWordsFreq)
 
     // Write to output
