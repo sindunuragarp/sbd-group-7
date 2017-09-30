@@ -1,7 +1,8 @@
 import java.io._
 import java.text._
-import java.util.{Calendar, Locale}
+import java.time.LocalDate
 import java.util.regex.Pattern
+import java.util.{Calendar, Locale}
 import javax.xml.parsers.DocumentBuilderFactory
 
 import org.apache.log4j.{Level, Logger}
@@ -47,7 +48,9 @@ object Twitterstats {
     getLang(s) == "en" || getLang(s) == "no"
   }
 
+
   ////
+
 
 	def main(args: Array[String]): Unit = {
 		val file = new File("cred.xml")
@@ -79,14 +82,16 @@ object Twitterstats {
 		val stream = TwitterUtils.createStream(ssc, None)
 		
 		// Start stream processing
-		handleTweetStream(stream)
+		processTweetStream(stream)
 		ssc.start()
 		ssc.awaitTermination()
 	}
 
+
   ////
 
-  def handleTweetStream(tweets: DStream[Status]): Unit = {
+
+  def processTweetStream(tweets: DStream[Status]): Unit = {
 
     // only take english tweets from stream
     val englishTweets = tweets.filter(x => isEnglish(x.getText))
@@ -112,14 +117,14 @@ object Twitterstats {
         tag, (
           tweet._2.userName,
           tweet._2.text,
-          tweet._2.maxCount - tweet._2.minCount - 1
+          tweet._2.maxCount - tweet._2.minCount + 1
         )
       ))
     )
 
-    // group by hashtags, and filter single use tags
+    // group by hashtags, and filter out single use tags
     val tagGroups = tagsTweet.groupByKey()
-      .filter(tag => tag._2.size == 1 && tag._2.head._3 <= 1)
+      .filter(tag => !(tag._2.size == 1 && tag._2.head._3 <= 1))
 
     // print on each time windows
     tagGroups.foreachRDD(rdd =>
@@ -127,9 +132,17 @@ object Twitterstats {
     )
   }
 
+
   ////
 
+
   def printTweets(tagGroups: Array[(String, scala.Iterable[(String, String, Int)])], filePath: String ): Unit = {
+
+    val date = new java.util.Date()
+    val sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
+    val formattedDate = sdf.format(date)
+
+    //// Open file ////
 
     val outDir = "output"
     new File(outDir).mkdirs
@@ -154,12 +167,16 @@ object Twitterstats {
       .filter(tag => tag._1.equals("None"))
       .map(tag => tag._2.toList
         .sortBy(tweet => tweet._3 * -1)
-        .map(tweet => (tag._1, tag._2.size, tweet))
+        .map(tweet => (tag._1, 0, tweet))
       )
 
     //// Print to file ////
 
     try {
+      writer.append("===================================================================\n")
+      writer.append("Time : " + formattedDate + "\n")
+      writer.append("===================================================================\n")
+
       val sortedTweetsSize = sortedTweets.flatten.length
 
       sortedTweets
@@ -181,12 +198,19 @@ object Twitterstats {
 
     //// Print top ten to output ////
 
+    println("===================================================================")
+    println("Time : " + formattedDate)
+    println("===================================================================")
+
+    // Take first ten tags and then take 3 from each
     val topTenTags = sortedTweets
       .take(10)
       .flatMap(tag => tag.take(3))
 
+    // Add tweets from no tags group
     val topTenTagsCombined = topTenTags ++ emptyHashtagTweets.flatten.take(10)
 
+    // Take top 10 of combined tags
     topTenTagsCombined.take(10)
       .zipWithIndex.foreach(tweet =>
         print(formatOutput(tweet))
@@ -194,7 +218,7 @@ object Twitterstats {
   }
 
   def formatOutput(content: ((String, Int, (String, String, Int)), Int) ): String = {
-    content._2 + ". " +
+    1+content._2 + ". " +
       content._1._2 + " " +
       content._1._1 + ":" +
       content._1._3._1 + ":" +
@@ -203,9 +227,11 @@ object Twitterstats {
       "\n-----------------------------------\n"
   }
 
+
   ////
 
-  class TweetInfo(val userName: String, val text: String, val hashtags: Array[String], val maxCount: Int, val minCount: Int)
+
+  class TweetInfo(val userName: String, val text: String, val hashtags: Array[String], val maxCount: Int, val minCount: Int) extends Serializable
 
   def extractTweetInfo(status: Status): (Long, TweetInfo) = {
     val x =
@@ -214,9 +240,9 @@ object Twitterstats {
 
     val tags = // Handle empty hashtags
       if (x.getHashtagEntities.isEmpty) Array("None")
-      else x.getHashtagEntities.map(tag => "#" + tag)
+      else x.getHashtagEntities.map(tag => "#" + tag.getText)
 
-    val tweetCount = x.getRetweetCount + 1
+    val tweetCount = x.getRetweetCount
 
     (x.getId, new TweetInfo(
       x.getUser.getScreenName,
