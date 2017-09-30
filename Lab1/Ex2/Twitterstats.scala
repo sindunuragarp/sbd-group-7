@@ -40,7 +40,7 @@ object Twitterstats {
     if (langCode == "lt" && m.find)
       langCode = "ko"
 
-    return langCode
+    langCode
   }
 
   def isEnglish(s: String): Boolean = {
@@ -92,39 +92,45 @@ object Twitterstats {
     val englishTweets = tweets.filter(x => isEnglish(x.getText))
 
     // extract target information from tweets
-    val tweetInfos = englishTweets.map(x => extractStatus(x))
+    val tweetInfos = englishTweets.map(x => extractTweetInfo(x))
 
     // group tweets for every time window
-    val tweetBuckets = tweetInfos.reduceByKeyAndWindow( (a: (String, String, Array[String], Int, Int), b: (String, String, Array[String], Int, Int)) => (
-      a._1,
-      a._2,
-      a._3,
-      Math.max(a._4, a._5),
-      Math.min(a._4, a._5)
-    ), Seconds(120), Seconds(2))
+    val tweetBuckets = tweetInfos.reduceByKeyAndWindow( (a: TweetInfo, b: TweetInfo) =>
+      new TweetInfo(
+        a.userName,
+        a.text,
+        a.hashtags,
+        Math.max(a.maxCount, b.maxCount),
+        Math.min(a.minCount, b.minCount)
+      ),
+      Seconds(120), Seconds(2)
+    )
 
-    tweetBuckets.foreachRDD(rdd => rdd.foreach(x => println(x)))
-  }
+    // expand tweets based on hashtags
+    val tagsTweet = tweetBuckets.flatMap(tweet => tweet._2.hashtags
+      .map(tag => (
+        tag, (
+          tweet._2.userName,
+          tweet._2.text,
+          tweet._2.maxCount - tweet._2.minCount - 1
+        )
+      ))
+    )
 
-  def extractStatus(status: Status): (Long, (String, String, Array[String], Int, Int)) = {
-    val x =
-      if (status.isRetweet) status.getRetweetedStatus
-      else status
+    // group by hashtags, and filter single use tags
+    val tagGroups = tagsTweet.groupByKey()
+      .filter(tag => tag._2.size == 1 && tag._2.head._3 <= 1)
 
-    val tweetCount = x.getRetweetCount + 1
-
-    (x.getId, (
-      x.getUser.getScreenName,
-      x.getText,
-      x.getHashtagEntities.map(_.getText),
-      tweetCount,
-      tweetCount
-    ))
+    // print on each time windows
+    tagGroups.foreachRDD(rdd =>
+      printTweets(rdd.collect(), "tweets.txt")
+    )
   }
 
   ////
 
-  def writeToFile(content: Iterable[String], filePath: String): Unit = {
+  def printTweets(tagGroups: Array[(String, scala.Iterable[(String, String, Int)])], filePath: String ): Unit = {
+
     val outDir = "output"
     new File(outDir).mkdirs
     val writer = new java.io.PrintWriter(
@@ -134,16 +140,91 @@ object Twitterstats {
       )
     )
 
+    //// Sort and format tweets ////
+
+    val sortedTweets = tagGroups
+      .filter(tag => !tag._1.equals("None"))
+      .sortBy(tag => tag._2.size * -1)
+      .map(tag => tag._2.toList
+        .sortBy(tweet => tweet._3 * -1)
+        .map(tweet => (tag._1, tag._2.size, tweet))
+      )
+
+    val emptyHashtagTweets = tagGroups
+      .filter(tag => tag._1.equals("None"))
+      .map(tag => tag._2.toList
+        .sortBy(tweet => tweet._3 * -1)
+        .map(tweet => (tag._1, tag._2.size, tweet))
+      )
+
+    //// Print to file ////
+
     try {
-      content
-        .foreach(x => {
-          writer.append(x)
-          writer.append("Record#. <Number of HashTags for this HashTag> #<HashTag>:<user_name>:<tweetCount> < tweetText>\n")
-        })
-    }
-    finally {
+      val sortedTweetsSize = sortedTweets.flatten.length
+
+      sortedTweets
+        .flatten
+        .zipWithIndex
+        .foreach(tweet =>
+          writer.append(formatOutput(tweet))
+        )
+
+      emptyHashtagTweets
+        .flatten
+        .zipWithIndex
+        .foreach(tweet =>
+          writer.append(formatOutput((tweet._1, sortedTweetsSize + tweet._2)))
+        )
+    } finally {
       writer.close()
     }
+
+    //// Print top ten to output ////
+
+    val topTenTags = sortedTweets
+      .take(10)
+      .flatMap(tag => tag.take(3))
+
+    val topTenTagsCombined = topTenTags ++ emptyHashtagTweets.flatten.take(10)
+
+    topTenTagsCombined.take(10)
+      .zipWithIndex.foreach(tweet =>
+        print(formatOutput(tweet))
+      )
+  }
+
+  def formatOutput(content: ((String, Int, (String, String, Int)), Int) ): String = {
+    content._2 + ". " +
+      content._1._2 + " " +
+      content._1._1 + ":" +
+      content._1._3._1 + ":" +
+      content._1._3._3 + " " +
+      content._1._3._2 +
+      "\n-----------------------------------\n"
+  }
+
+  ////
+
+  class TweetInfo(val userName: String, val text: String, val hashtags: Array[String], val maxCount: Int, val minCount: Int)
+
+  def extractTweetInfo(status: Status): (Long, TweetInfo) = {
+    val x =
+      if (status.isRetweet) status.getRetweetedStatus
+      else status
+
+    val tags = // Handle empty hashtags
+      if (x.getHashtagEntities.isEmpty) Array("None")
+      else x.getHashtagEntities.map(tag => "#" + tag)
+
+    val tweetCount = x.getRetweetCount + 1
+
+    (x.getId, new TweetInfo(
+      x.getUser.getScreenName,
+      x.getText,
+      tags,
+      tweetCount,
+      tweetCount
+    ))
   }
 }
 
