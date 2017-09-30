@@ -38,10 +38,9 @@ object WordFreqCounts {
     // Custom regex for splitting text into words (as defined) and non words
     val wordRegex = """([a-zA-Z][\w']*-?[a-zA-Z]+|[a-zA-Z])|([^a-zA-Z\s])+""".r()
 
-    // Read input file as rdd, and split by carriage return to get each line
+    // Read input file as rdd of each line
     // >> lines = (line)
     val lines = sc.textFile(inputFile)
-      .flatMap(x => x.split("""\n\r"""))
 
     // Split each line into individual words according to the word regex
     // >> words = [(word)]
