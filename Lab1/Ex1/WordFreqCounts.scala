@@ -1,12 +1,9 @@
 // sbt assembly help: https://sparkour.urizone.net/recipes/building-sbt/
-import org.apache.spark._
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.rdd.RDDFunctions._
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
 import java.io._
-import java.util.Locale
-import org.apache.commons.lang3.StringUtils
+
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark._
+import org.apache.spark.mllib.rdd.RDDFunctions._
 
 object WordFreqCounts {
 
@@ -47,7 +44,7 @@ object WordFreqCounts {
     val words = lines
       .map(_.toLowerCase) // convert to lower case to avoid case sensitivity
       .map("." + _)       // added full stop at start of each line (no prev word after a newline)
-      .flatMap(x => wordRegex.findAllIn(x));
+      .flatMap(x => wordRegex.findAllIn(x))
 
     // Transform as pairs of current and previous word, then convert into tuple format
     // >> wordPairs = [((word, preceded word), 1)]
