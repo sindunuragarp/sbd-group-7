@@ -94,12 +94,16 @@ object Twitterstats {
   def processTweetStream(tweets: DStream[Status]): Unit = {
 
     // only take english tweets from stream
+    // >> englishTweets = stream[status]
     val englishTweets = tweets.filter(x => isEnglish(x.getText))
 
     // extract target information from tweets
+    // >> tweetInfos = stream[(tweet_id, tweetInfo)]
+    // >> tweetInfo = (username, text, array[hashtags], maxCount, minCount)
     val tweetInfos = englishTweets.map(x => extractTweetInfo(x))
 
-    // group tweets for every time window
+    // group tweets for every time window, and compute max and min count within window
+    // >> tweetBuckets = stream[(tweet_id, tweetInfo)]
     val tweetBuckets = tweetInfos.reduceByKeyAndWindow( (a: TweetInfo, b: TweetInfo) =>
       new TweetInfo(
         a.userName,
@@ -111,7 +115,8 @@ object Twitterstats {
       Seconds(120), Seconds(2)
     )
 
-    // expand tweets based on hashtags
+    // expand tweets based on hashtags + calculate actual count
+    // >> tagsTweet = stream[(tag, (username, text, tweetCount))]
     val tagsTweet = tweetBuckets.flatMap(tweet => tweet._2.hashtags
       .map(tag => (
         tag, (
@@ -123,10 +128,11 @@ object Twitterstats {
     )
 
     // group by hashtags, and filter out single use tags
+    // >> tagGroups = stream[(tag, [(username, text, tweetCount)])]
     val tagGroups = tagsTweet.groupByKey()
       .filter(tag => !(tag._2.size == 1 && tag._2.head._3 <= 1))
 
-    // print on each time windows
+    // for each rdd time window, collect data and print to output
     tagGroups.foreachRDD(rdd =>
       printTweets(rdd.collect(), "tweets.txt")
     )
@@ -153,7 +159,9 @@ object Twitterstats {
       )
     )
 
-    //// Sort and format tweets ////
+    //// Sort and format tweets to single tuple with all info ////
+    // >> data = [(tag, tagCount, (username, text, tweetCount))]
+    // >> * data still grouped per tag
 
     val sortedTweets = tagGroups
       .filter(tag => !tag._1.equals("None"))
@@ -171,6 +179,8 @@ object Twitterstats {
       )
 
     //// Print to file ////
+    // >> dataWithIndex = [((tag, tagCount, (username, text, tweetCount)), index)]
+    // >> * data flattened to a single list and appended with its index
 
     try {
       writer.append("===================================================================\n")
@@ -203,20 +213,24 @@ object Twitterstats {
     println("===================================================================")
 
     // Take first ten tags and then take 3 from each
+    // >> data = [(tag, tagCount, (username, text, tweetCount))]
     val topTenTags = sortedTweets
       .take(10)
       .flatMap(tag => tag.take(3))
 
     // Add tweets from no tags group
+    // >> data = [(tag, tagCount, (username, text, tweetCount))]
     val topTenTagsCombined = topTenTags ++ emptyHashtagTweets.flatten.take(10)
 
     // Take top 10 of combined tags
+    // >> dataWithIndex = [((tag, tagCount, (username, text, tweetCount)), index)]
     topTenTagsCombined.take(10)
       .zipWithIndex.foreach(tweet =>
         print(formatOutput(tweet))
       )
   }
 
+  // format output according to example
   def formatOutput(content: ((String, Int, (String, String, Int)), Int) ): String = {
     1+content._2 + ". " +
       content._1._2 + " " +
@@ -231,17 +245,24 @@ object Twitterstats {
   ////
 
 
+  // TweetInfo class to make the code easier to read
   class TweetInfo(val userName: String, val text: String, val hashtags: Array[String], val maxCount: Int, val minCount: Int) extends Serializable
 
   def extractTweetInfo(status: Status): (Long, TweetInfo) = {
+
+    // Take actual tweet if it is a retweet
     val x =
       if (status.isRetweet) status.getRetweetedStatus
       else status
 
-    val tags = // Handle empty hashtags
+    // Handle empty hashtags by inserting None tag
+    // Actual hashtags are given a hash to differentiate
+    val tags =
       if (x.getHashtagEntities.isEmpty) Array("None")
       else x.getHashtagEntities.map(tag => "#" + tag.getText)
 
+    // Take count from global retweetCount
+    // count is stored as maxCount and minCount to get actual count in window after grouping
     val tweetCount = x.getRetweetCount
 
     (x.getId, new TweetInfo(
