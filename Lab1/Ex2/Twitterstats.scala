@@ -116,10 +116,11 @@ object Twitterstats {
     )
 
     // expand tweets based on hashtags + calculate actual count
-    // >> tagsTweet = stream[(tag, (username, text, tweetCount))]
+    // >> tagsTweet = stream[(tag, tagInfo)]
+    // >> tagInfo = (username, text, tweetCount)
     val tagsTweet = tweetBuckets.flatMap(tweet => tweet._2.hashtags
       .map(tag => (
-        tag, (
+        tag, new TagInfo(
           tweet._2.userName,
           tweet._2.text,
           tweet._2.maxCount - tweet._2.minCount + 1
@@ -128,9 +129,9 @@ object Twitterstats {
     )
 
     // group by hashtags, and filter out single use tags
-    // >> tagGroups = stream[(tag, [(username, text, tweetCount)])]
+    // >> tagGroups = stream[(tag, [tagInfo])]
     val tagGroups = tagsTweet.groupByKey()
-      .filter(tag => !(tag._2.size == 1 && tag._2.head._3 <= 1))
+      .filter(tag => !(tag._2.size == 1 && tag._2.head.count <= 1))
 
     // for each rdd time window, collect data and print to output
     tagGroups.foreachRDD(rdd =>
@@ -142,7 +143,7 @@ object Twitterstats {
   ////
 
 
-  def printTweets(tagGroups: Array[(String, scala.Iterable[(String, String, Int)])], filePath: String ): Unit = {
+  def printTweets(tagGroups: Array[(String, scala.Iterable[TagInfo])], filePath: String ): Unit = {
 
     val date = new java.util.Date()
     val sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
@@ -160,26 +161,26 @@ object Twitterstats {
     )
 
     //// Sort and format tweets to single tuple with all info ////
-    // >> data = [(tag, tagCount, (username, text, tweetCount))]
+    // >> data = [(tag, tagCount, tagInfo)]
     // >> * data still grouped per tag
 
     val sortedTweets = tagGroups
       .filter(tag => !tag._1.equals("None"))
       .sortBy(tag => tag._2.size * -1)
       .map(tag => tag._2.toList
-        .sortBy(tweet => tweet._3 * -1)
-        .map(tweet => (tag._1, tag._2.size, tweet))
+        .sortBy(info => info.count * -1)
+        .map(info => (tag._1, tag._2.size, info))
       )
 
     val emptyHashtagTweets = tagGroups
       .filter(tag => tag._1.equals("None"))
       .map(tag => tag._2.toList
-        .sortBy(tweet => tweet._3 * -1)
-        .map(tweet => (tag._1, 0, tweet))
+        .sortBy(info => info.count * -1)
+        .map(info => (tag._1, 0, info))
       )
 
     //// Print to file ////
-    // >> dataWithIndex = [((tag, tagCount, (username, text, tweetCount)), index)]
+    // >> dataWithIndex = [((tag, tagCount, tagInfo), index)]
     // >> * data flattened to a single list and appended with its index
 
     try {
@@ -192,15 +193,15 @@ object Twitterstats {
       sortedTweets
         .flatten
         .zipWithIndex
-        .foreach(tweet =>
-          writer.append(formatOutput(tweet))
+        .foreach(info =>
+          writer.append(formatOutput(info))
         )
 
       emptyHashtagTweets
         .flatten
         .zipWithIndex
-        .foreach(tweet =>
-          writer.append(formatOutput((tweet._1, sortedTweetsSize + tweet._2)))
+        .foreach(info =>
+          writer.append(formatOutput((info._1, sortedTweetsSize + info._2)))
         )
     } finally {
       writer.close()
@@ -213,17 +214,17 @@ object Twitterstats {
     println("===================================================================")
 
     // Take first ten tags and then take 3 from each
-    // >> data = [(tag, tagCount, (username, text, tweetCount))]
+    // >> data = [(tag, tagCount, tagInfo)]
     val topTenTags = sortedTweets
       .take(10)
       .flatMap(tag => tag.take(3))
 
     // Add tweets from no tags group
-    // >> data = [(tag, tagCount, (username, text, tweetCount))]
+    // >> data = [(tag, tagCount, tagInfo)]
     val topTenTagsCombined = topTenTags ++ emptyHashtagTweets.flatten.take(10)
 
     // Take top 10 of combined tags
-    // >> dataWithIndex = [((tag, tagCount, (username, text, tweetCount)), index)]
+    // >> dataWithIndex = [((tag, tagCount, tagInfo), index)]
     topTenTagsCombined.take(10)
       .zipWithIndex.foreach(tweet =>
         print(formatOutput(tweet))
@@ -231,13 +232,13 @@ object Twitterstats {
   }
 
   // format output according to example
-  def formatOutput(content: ((String, Int, (String, String, Int)), Int) ): String = {
+  def formatOutput(content: ((String, Int, TagInfo), Int) ): String = {
     1+content._2 + ". " +
       content._1._2 + " " +
       content._1._1 + ":" +
-      content._1._3._1 + ":" +
-      content._1._3._3 + " " +
-      content._1._3._2 +
+      content._1._3.userName + ":" +
+      content._1._3.count + " " +
+      content._1._3.text +
       "\n-----------------------------------\n"
   }
 
@@ -245,9 +246,22 @@ object Twitterstats {
   ////
 
 
-  // TweetInfo class to make the code easier to read
-  class TweetInfo(val userName: String, val text: String, val hashtags: Array[String], val maxCount: Int, val minCount: Int) extends Serializable
+  // TweetInfo and TagInfo class to make the code easier to read
+  class TweetInfo(
+    val userName: String,
+    val text: String,
+    val hashtags: Array[String],
+    val maxCount: Int,
+    val minCount: Int
+  ) extends Serializable
 
+  class TagInfo(
+    val userName: String,
+    val text: String,
+    val count: Int
+  ) extends Serializable
+
+  // function to extract needed information from twitter4j Status
   def extractTweetInfo(status: Status): (Long, TweetInfo) = {
 
     // Take actual tweet if it is a retweet
