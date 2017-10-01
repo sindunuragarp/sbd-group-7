@@ -133,17 +133,28 @@ object Twitterstats {
     val tagGroups = tagsTweet.groupByKey()
       .filter(tag => !(tag._2.size == 1 && tag._2.head.count <= 1))
 
-    // for each rdd time window, collect data and print to output
-    tagGroups.foreachRDD(rdd =>
-      printTweets(rdd.collect(), "tweets.txt")
-    )
+    // convert data in each time window into a small rdd batch
+    tagGroups.foreachRDD(rdd => {
+
+      // sort data on both levels and format data to single tuple with all info
+      // >> sortedRdd = [[tag, tagCount, tagInfo]]
+      val sortedRdd = rdd
+        .sortBy(tag => tag._2.size * -1)
+        .map(tag => tag._2.toList
+          .sortBy(info => info.count * -1)
+          .map(info => (tag._1, tag._2.size, info))
+        )
+
+      // print sorted data
+      printTweets(sortedRdd.collect, "tweets.txt")
+    })
   }
 
 
   ////
 
 
-  def printTweets(tagGroups: Array[(String, scala.Iterable[TagInfo])], filePath: String ): Unit = {
+  def printTweets(tagGroups: Array[scala.List[(String, Int, TagInfo)]], filePath: String ): Unit = {
 
     val date = new java.util.Date()
     val sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss")
@@ -160,71 +171,47 @@ object Twitterstats {
       )
     )
 
-    //// Sort and format tweets to single tuple with all info ////
-    // >> data = [(tag, tagCount, tagInfo)]
-    // >> * data still grouped per tag
-
-    val sortedTweets = tagGroups
-      .filter(tag => !tag._1.equals("None"))
-      .sortBy(tag => tag._2.size * -1)
-      .map(tag => tag._2.toList
-        .sortBy(info => info.count * -1)
-        .map(info => (tag._1, tag._2.size, info))
-      )
-
-    val emptyHashtagTweets = tagGroups
-      .filter(tag => tag._1.equals("None"))
-      .map(tag => tag._2.toList
-        .sortBy(info => info.count * -1)
-        .map(info => (tag._1, 0, info))
-      )
-
     //// Print to file ////
     // >> dataWithIndex = [((tag, tagCount, tagInfo), index)]
-    // >> * data flattened to a single list and appended with its index
+
+    val withHashtag = tagGroups.flatten.filter(info => !info._1.equals("None"))
+    val withHashtagSize = withHashtag.length
+    val noHashtag = tagGroups.flatten.filter(info => info._1.equals("None"))
+      .map(info => (info._1, 0, info._3)) // set tagCount to 0 (no hashtag)
 
     try {
       writer.append("===================================================================\n")
       writer.append("Time : " + formattedDate + "\n")
       writer.append("===================================================================\n")
 
-      val sortedTweetsSize = sortedTweets.flatten.length
+      withHashtag.zipWithIndex.foreach(info =>
+        writer.append(formatOutput(info))
+      )
 
-      sortedTweets
-        .flatten
-        .zipWithIndex
-        .foreach(info =>
-          writer.append(formatOutput(info))
-        )
-
-      emptyHashtagTweets
-        .flatten
-        .zipWithIndex
-        .foreach(info =>
-          writer.append(formatOutput((info._1, sortedTweetsSize + info._2)))
-        )
+      noHashtag.zipWithIndex.foreach(info =>
+        writer.append(formatOutput( (info._1, withHashtagSize + info._2) ))
+      )
     } finally {
       writer.close()
     }
 
     //// Print top ten to output ////
+    // >> dataWithIndex = [((tag, tagCount, tagInfo), index)]
 
     println("===================================================================")
     println("Time : " + formattedDate)
     println("===================================================================")
 
-    // Take first ten tags and then take 3 from each
-    // >> data = [(tag, tagCount, tagInfo)]
-    val topTenTags = sortedTweets
-      .take(10)
+    // Take first ten tags (11 with None tag) and then take 3 from each
+    val topTenTags = tagGroups
+      .take(11)
       .flatMap(tag => tag.take(3))
+      .filter(info => !info._1.equals("None"))
 
     // Add tweets from no tags group
-    // >> data = [(tag, tagCount, tagInfo)]
-    val topTenTagsCombined = topTenTags ++ emptyHashtagTweets.flatten.take(10)
+    val topTenTagsCombined = topTenTags ++ noHashtag.take(10)
 
     // Take top 10 of combined tags
-    // >> dataWithIndex = [((tag, tagCount, tagInfo), index)]
     topTenTagsCombined.take(10)
       .zipWithIndex.foreach(tweet =>
         print(formatOutput(tweet))
