@@ -84,7 +84,7 @@ object WordFreqCounts {
 
   // because of the regex split, all string starting with a letter can be considered a word
   def isWord(text: String): Boolean = {
-    return text.charAt(0).isLetter
+    text.charAt(0).isLetter
   }
 
   // sorts the iterables by freq and alphabet, and prints them to the specified output file (inside the output dir)
