@@ -13,7 +13,7 @@ from fastparquet import ParquetFile
 
 ###############################################################################
 
-directory = "../data/output/"
+directory = "data/output/"
 files = [directory + f for f in os.listdir(directory) if f.endswith('.parquet')]
 
 frames = []

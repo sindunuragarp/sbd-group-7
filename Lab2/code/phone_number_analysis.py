@@ -4,6 +4,7 @@
 import argparse
 import re
 import requests
+import time
 
 from requests_file import FileAdapter
 from tempfile import TemporaryFile
@@ -47,6 +48,7 @@ class PhoneNumbers:
     def run(self):
         sc = SparkContext(appName=self.name)
         sqlc = SQLContext(sparkContext=sc)
+        start = time.perf_counter()
 
         self.failed_record_parse = sc.accumulator(0)
         self.failed_segment = sc.accumulator(0)
@@ -60,13 +62,14 @@ class PhoneNumbers:
         phone_numbers = input_data.flatMap(self.process_warcs)
         phone_numb_agg_url = phone_numbers.groupByKey().mapValues(list)
 
-        # --- #
-
         sqlc.createDataFrame(phone_numb_agg_url, schema=self.output_schema) \
             .write \
             .format("parquet") \
             .save(self.output_dir)
 
+        # --- #
+
+        self.log(sc, "Finished running in {} seconds".format(time.perf_counter()-start))
         self.log(sc, "Failed segments: {}".format(self.failed_segment.value))
         self.log(sc, "Failed parses: {}".format(self.failed_record_parse.value))
 
