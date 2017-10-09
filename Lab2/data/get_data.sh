@@ -14,7 +14,6 @@ test -d input || mkdir input
 
 listing=crawl-data/$CRAWL/$FILE_TYPE.paths.gz
 mkdir -p crawl-data/$CRAWL/
-#wget --timestamping $BASE_URL/$listing -O $listing
 cd crawl-data/$CRAWL/
 wget --timestamping $BASE_URL/$listing
 cd -
@@ -24,13 +23,8 @@ gzip -dc $listing | sed 's@^@s3://commoncrawl/@' \
 for segment in $(gzip -dc $listing | head -$LOCAL_SEGMENTS ); do
     mkdir -p $(dirname $segment)
     cd $(dirname $segment)
-	wget --timestamping $BASE_URL/$segment
+    wget --timestamping $BASE_URL/$segment
     cd -
-    #wget --timestamping $BASE_URL/$segment -O $segment
     echo file:$PWD/$segment >> $local_file_index
     echo s3://commoncrawl/$segment >> $s3_sample_file_index
 done
-
-
-
-
