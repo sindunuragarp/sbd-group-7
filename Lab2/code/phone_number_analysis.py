@@ -54,7 +54,7 @@ class PhoneNumbers:
         self.failed_segment = sc.accumulator(0)
 
         if self.partitions is None:
-            self.partitions = sc.defaultParallelism
+            self.partitions = sc.defaultParallelism * 3
 
         # --- #
 
