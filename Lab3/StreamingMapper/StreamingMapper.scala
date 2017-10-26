@@ -12,27 +12,25 @@ import javax.xml.parsers.DocumentBuilderFactory
 import javax.xml.parsers.DocumentBuilder
 import org.w3c.dom.Document
 	
-object StreamingMapper
-{
-	def getTimeStamp() : String =
-	{
+object StreamingMapper {
+	def getTimeStamp() : String = {
 		return new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime())
 	}
 
-	def getTagValue(document: Document, tag: String) : String =
-	{
+	def getTagValue(document: Document, tag: String) : String = {
 		document.getElementsByTagName(tag).item(0).getTextContent
 	}
 	
-	def main(args: Array[String])
-	{
+	def main(args: Array[String]) {
 		Logger.getLogger("org").setLevel(Level.OFF)
 		Logger.getLogger("akka").setLevel(Level.OFF)
 		Logger.getRootLogger.setLevel(Level.OFF)
 		
 		val sparkConf = new SparkConf().setAppName("WordCount")
-		
-		// Read the parameters from the config file //////////////////////////
+
+    //////////////////////////////////////////////////////////////////////
+
+		// Read the parameters from the config file
 		val file = new File("config.xml")
 		val documentBuilderFactory = DocumentBuilderFactory.newInstance
 		val documentBuilder = documentBuilderFactory.newDocumentBuilder
@@ -53,6 +51,7 @@ object StreamingMapper
 		// Create stream and output directories if they don't already exist
 		new File(streamDir).mkdirs
 		new File(outputDir).mkdirs
+
 		//////////////////////////////////////////////////////////////////////
 		
 		sparkConf.setMaster("local[" + numTasks + "]")
@@ -61,7 +60,9 @@ object StreamingMapper
 		
 		// Add your code here. 
 		// Use the function textFileStream of StreamingContext to read data as the files are added to the streamDir directory.
-		
+
+    //////////////////////////////////////////////////////////////////////
+
 		ssc.start()
 		ssc.awaitTermination()
 	}
