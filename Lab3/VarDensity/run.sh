@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # arg1 = number of tasks
 # arg2 = path of the dbsnp file
 # arg3 = path of the dict file
