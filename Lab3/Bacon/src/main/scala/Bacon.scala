@@ -232,7 +232,7 @@ object Bacon {
     // (id, dist)
     val baconNumbers = spResult.vertices
       .map{case(id, spmap) => (id, spmap.getOrElse(KevinBaconID, 100))}
-      .filter(x => x._2 <= 6)
+      .filter(x => x._2 <= 6 && x._2 > 0)
     baconNumbers.setName("rdd_baconNumbers")
 
 
