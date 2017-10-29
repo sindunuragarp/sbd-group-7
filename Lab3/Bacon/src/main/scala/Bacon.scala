@@ -230,7 +230,9 @@ object Bacon {
     val spResult = ShortestPaths.run(graph, Seq(KevinBaconID))
 
     // (id, dist)
-    val baconNumbers = spResult.vertices.map{case(id, sps) => (id, sps(KevinBaconID))}.filter(x => x._2 <= 6)
+    val baconNumbers = spResult.vertices
+      .map{case(id, spmap) => (id, spmap.getOrElse(KevinBaconID, 100))}
+      .filter(x => x._2 <= 6)
     baconNumbers.setName("rdd_baconNumbers")
 
 
