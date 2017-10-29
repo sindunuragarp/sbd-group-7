@@ -266,31 +266,33 @@ object Bacon {
     val numAllActors = numAllActorsM + numAllActorsF
     val numMovies = movie2actorId.groupByKey().count()
 
+    val percAllActorsM = (numAllActorsM * 100) / numAllActors
+    val percAllActorsF = (numAllActorsF * 100) / numAllActors
+
+    fout.write("Total number of actors = " + numAllActors + ", out of which " + numAllActorsM + " (" + percAllActorsM + "%) are males while " + numAllActorsF + " (" + percAllActorsF + "%) are females.\n")
+    fout.write("Total number of movies = " + numMovies + "\n\n")
+
+    ////
+
+		for (dist <- 1 until Distance + 1) {
+      val countDistActorsM = allActorsM.count(x => x._2 == dist)
+      val countDistActorsF = allActorsF.count(x => x._2 == dist)
+
+			val percDistActorsM = countDistActorsM * 100.0 / numAllActorsM
+			val percDistActorsF = countDistActorsF * 100.0 / numAllActorsF
+
+			fout.write("There are " + countDistActorsM + " (" +  f"$percDistActorsM%.1f" + "%) actors and " + countDistActorsF + " (" + f"$percDistActorsF%.1f" + "%) actresses at distance " + dist + "\n")
+		}
+
+    ////
+
     val numActorsM = allActorsM.length
     val numActorsF = allActorsF.length
     val numActors = numActorsM + numActorsF
 
-    val percActorsM = (numAllActorsM * 100) / numAllActors
-    val percActorsF = (numAllActorsF * 100) / numAllActors
-
-    ////
-
-		fout.write("Total number of actors = " + numAllActors + ", out of which " + numActorsM + " (" + percActorsM + "%) are males while " + numActorsF + " (" + percActorsF + "%) are females.\n")
-		fout.write("Total number of movies = " + numMovies + "\n\n")
-
-		for (dist <- 1 until Distance+1) {
-      val countDistActorsM = allActorsM.count(x => x._2 == dist)
-      val countDistActorsF = allActorsF.count(x => x._2 == dist)
-
-			val percDistActorsM = countDistActorsM * 100.0 / numActorsM
-			val percDistActorsF = countDistActorsF * 100.0 / numActorsF
-
-			fout.write("There are " + countDistActorsM + " (" +  f"$percDistActorsM%.1f" + "%) actors and " + countDistActorsF + " (" + f"$percDistActorsF%.1f" + "%) actresses at distance " + (dist + 1) + "\n")
-		}
-
 		fout.write("\nTotal number of actors from distance 1 to 6 = " + (numActorsM + numActorsF) + ", ratio = " + (numActors.toFloat / numAllActors) + "\n")
-		fout.write("Total number of male actors from distance 1 to 6 = " + numActorsM + ", ratio = " + (numActorsM.toFloat / numActorsM) + "\n" )
-		fout.write("Total number of female actors (actresses) from distance 1 to 6 = " + numActorsF + ", ratio = " + (numActorsF.toFloat / numActorsF) + "\n")
+		fout.write("Total number of male actors from distance 1 to 6 = " + numActorsM + ", ratio = " + (numActorsM.toFloat / numAllActorsM) + "\n" )
+		fout.write("Total number of female actors (actresses) from distance 1 to 6 = " + numActorsF + ", ratio = " + (numActorsF.toFloat / numAllActorsF) + "\n")
 
     ////
 
