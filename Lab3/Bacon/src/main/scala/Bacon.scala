@@ -297,14 +297,18 @@ object Bacon {
     ////
 
 		fout.write( "\nList of male actors at distance 6:\n" )
-    allActorsM.zipWithIndex.foreach(x => {
-      fout.write(x._2 + ". " + x._1._1 + "\n")
-    })
+    allActorsM
+      .filter(x => x._2 == 6)
+      .zipWithIndex.foreach(x => {
+        fout.write(x._2 + ". " + x._1._1 + "\n")
+      })
 
-    fout.write( "\nList of male actors at distance 6:\n" )
-    allActorsF.zipWithIndex.foreach(x => {
-      fout.write(x._2 + ". " + x._1._1 + "\n")
-    })
+    fout.write( "\nList of female actors (actresses) at distance 6:\n" )
+    allActorsF
+      .filter(x => x._2 == 6)
+      .zipWithIndex.foreach(x => {
+        fout.write(x._2 + ". " + x._1._1 + "\n")
+      })
 
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
