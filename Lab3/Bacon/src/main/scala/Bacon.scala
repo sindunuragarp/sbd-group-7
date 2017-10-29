@@ -278,7 +278,7 @@ object Bacon {
 		fout.write("Total number of actors = " + numAllActors + ", out of which " + numActorsM + " (" + percActorsM + "%) are males while " + numActorsF + " (" + percActorsF + "%) are females.\n")
 		fout.write("Total number of movies = " + numMovies + "\n\n")
 
-		for (dist <- 0 until Distance) {
+		for (dist <- 1 until Distance+1) {
       val countDistActorsM = allActorsM.count(x => x._2 == dist)
       val countDistActorsF = allActorsF.count(x => x._2 == dist)
 
