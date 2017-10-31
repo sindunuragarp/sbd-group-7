@@ -47,19 +47,19 @@ object VarDensity {
 
 	def calculateDensity(inputFile: String): Unit = {
 
-
+		// (text)
 		val dict = sc
 			.textFile(inputFile)
 			.mapPartitionsWithIndex{
 				(index, row) => if (index == 0) row.drop(1) else row      // remove header
 			}
 
-
+		// (chromosome name, length)
 		val data = dict
 			.map(x => textToData(x))
 			.filter(x => !x._1.contains("_"))                           // filter out unnecessary data
 
-
+		// (chromosome name, index, length)
 		val indexedData = data
 			.zipWithIndex()                                             // pop out the index
 			.map(x => (x._1._1, x._2, x._1._2))
