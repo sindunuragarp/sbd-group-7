@@ -59,10 +59,10 @@ object VarDensity {
 			.map(x => textToData(x))
 			.filter(x => !x._1.contains("_"))                                     // filter out unnecessary data
 
-		// (chromosome name, index, region)
+		// (chromosome name, (index, region))
 		val indexedData = data
 			.zipWithIndex()                                                       // pop out the index
-			.map(x => (x._1._1, x._2, lengthToRegion(x._1._2)))
+			.map(x => (x._1._1, (x._2, lengthToRegion(x._1._2))))
 
 		indexedData.foreach(println)
 
