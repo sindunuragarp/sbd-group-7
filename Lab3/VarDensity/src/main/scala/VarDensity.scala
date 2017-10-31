@@ -74,7 +74,7 @@ object VarDensity {
 		val chromosome = delimitedText(2)
 		val length = delimitedText(4).toDouble
 
-		return (chromosome, length)
+		(chromosome, length)
 
 	}
 
