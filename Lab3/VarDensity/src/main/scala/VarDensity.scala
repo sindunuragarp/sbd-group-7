@@ -62,7 +62,7 @@ object VarDensity {
 		// (chromosome name, index, region)
 		val indexedData = data
 			.zipWithIndex()                                                       // pop out the index
-			.map(x => (x._1._1, x._2, math.ceil(x._1._2 / 1000000).toInt))
+			.map(x => (x._1._1, x._2, lengthToRegion(x._1._2)))
 
 		indexedData.foreach(println)
 
@@ -77,5 +77,7 @@ object VarDensity {
 		return (chromosome, length)
 
 	}
+
+	def lengthToRegion(length: Double): Int = math.ceil(length / 1000000).toInt
 
 }
