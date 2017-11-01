@@ -1,12 +1,15 @@
 import java.io._
 import java.text._
-import java.util.Calendar
+import java.util.zip.GZIPOutputStream
+import java.util.{Calendar, UUID}
 import javax.xml.parsers.DocumentBuilderFactory
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark._
 import org.apache.spark.streaming._
 import org.w3c.dom.Document
+
+import sys.process._
 
 object StreamingMapper {
   val streamBatchSize = 200
@@ -22,6 +25,13 @@ object StreamingMapper {
 
   def getTagValue(document: Document, tag: String) : String = {
     document.getElementsByTagName(tag).item(0).getTextContent
+  }
+
+  def bwaRun(inPath: String, outPath: String, bwaPath: String, refPath: String, numThreads: String): Unit = {
+    val out = new File(outPath)
+    val cmd = Seq(bwaPath, "mem", refPath, "-p", "-t", numThreads, inPath)
+
+    (cmd #> out).!
   }
 
 
@@ -61,9 +71,11 @@ object StreamingMapper {
     new File(outputDir).mkdirs
     new File(tmpDir).mkdirs()
 
-    // Delete contents of stream dir
+    // Delete contents of stream & output dir
     val streamDirFile = new File(streamDir)
+    val outputDirFile = new File(outputDir)
     streamDirFile.listFiles().foreach(file => file.delete())
+    outputDirFile.listFiles().foreach(file => file.delete())
 
     //////////////////////////////////////////////////////////////////////
 
@@ -76,12 +88,29 @@ object StreamingMapper {
 
     //////////////////////////////////////////////////////////////////////
 
-    ssc.textFileStream("file://" + streamDirFile.getAbsolutePath).map(x => x)
+    ssc.textFileStream("file://" + streamDirFile.getAbsolutePath)
       .foreachRDD(rdd => {
-        println("START")
-        val out = rdd.collect()
-        val size = out.length / 4
-        println(s"Received $size reads")
+        val batch = rdd.collect()
+        val size = batch.length / 4
+        println(s"Processing $size reads")
+
+        // Create tmp file
+        val uuid = UUID.randomUUID()
+        val tmpFile = s"$tmpDir/chunk_$uuid.fq.gz"
+
+        val outputStream = new FileOutputStream(tmpFile)
+        val zipOutputStream = new GZIPOutputStream(outputStream)
+
+        // Write tmp file
+        while (batch.iterator.hasNext) {
+          zipOutputStream.write(batch.iterator.next.getBytes)
+        }
+        zipOutputStream.close()
+
+        // Call BWA
+        val outFile = s"$outputDir/chunk_$uuid.sam"
+        bwaRun(tmpFile, outFile, bwaPath, refPath, numThreads)
+        new File(tmpFile).delete()
       })
 
     //////////////////////////////////////////////////////////////////////
