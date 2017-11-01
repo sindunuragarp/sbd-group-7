@@ -9,7 +9,8 @@ import org.apache.spark.streaming._
 import org.w3c.dom.Document
 
 object StreamingMapper {
-  val streamBatchSize = 10000
+  val streamBatchSize = 200
+  val streamBatchInterval = 50 //milliseconds
 
 
   ////
@@ -50,6 +51,7 @@ object StreamingMapper {
     val streamDir = getTagValue(document, "streamDir")
     val inputDir = getTagValue(document, "inputDir")
     val outputDir = getTagValue(document, "outputDir")
+    val tmpDir = "tmp"
 
     println(s"refPath = $refPath\nbwaPath = $bwaPath\nnumTasks = $numTasks\nnumThreads = $numThreads\nintervalSecs = $intervalSecs")
     println(s"streamDir = $streamDir\ninputDir = $inputDir\noutputDir = $outputDir")
@@ -57,6 +59,11 @@ object StreamingMapper {
     // Create stream and output directories if they don't already exist
     new File(streamDir).mkdirs
     new File(outputDir).mkdirs
+    new File(tmpDir).mkdirs()
+
+    // Delete contents of stream dir
+    val streamDirFile = new File(streamDir)
+    streamDirFile.listFiles().foreach(file => file.delete())
 
     //////////////////////////////////////////////////////////////////////
 
@@ -64,14 +71,18 @@ object StreamingMapper {
     sparkConf.set("spark.cores.max", numTasks)
     val ssc = new StreamingContext(sparkConf, Seconds(intervalSecs))
     val driver = new Thread {
-      override def run(): Unit = runDriver(inputDir, streamDir, intervalSecs)
+      override def run(): Unit = runDriver(inputDir, streamDir, tmpDir)
     }
 
     //////////////////////////////////////////////////////////////////////
 
-    // Add your code here.
-    // Use the function textFileStream of StreamingContext to read data as the files are added to the streamDir directory.
-    ssc.textFileStream(streamDir)
+    ssc.textFileStream("file://" + streamDirFile.getAbsolutePath).map(x => x)
+      .foreachRDD(rdd => {
+        println("START")
+        val out = rdd.collect()
+        val size = out.length / 4
+        println(s"Received $size reads")
+      })
 
     //////////////////////////////////////////////////////////////////////
 
@@ -79,13 +90,18 @@ object StreamingMapper {
     driver.start()
     driver.join()
     ssc.awaitTermination()
+
+    // Delete temporary directory
+    val tmpDirFile = new File(tmpDir)
+    tmpDirFile.listFiles().foreach(file => file.delete())
+    tmpDirFile.delete()
   }
 
 
   ////
 
 
-  def runDriver(inputDir: String, streamDir: String, intervalSecs: Int): Unit = {
+  def runDriver(inputDir: String, streamDir: String, tmpDir: String): Unit = {
     println("Starting driver")
 
     val dir = new File(inputDir)
@@ -102,18 +118,18 @@ object StreamingMapper {
       .grouped(streamBatchSize)
       .zipWithIndex
       .foreach{case(tuples, index) =>
-        val filename = "stream_fastq_" + index + ".txt"
-        val file = new File(streamDir + "/" + filename)
+        val filename = "stream_fastq_" + index
+        val file = new File(tmpDir + "/" + filename + ".tmp")
         val bw = new BufferedWriter(new FileWriter(file))
 
-        println("Writing to " + filename)
         tuples.foreach{case(a,b) =>
           bw.write(a + "\n")
           bw.write(b + "\n")
         }
-
         bw.close()
-        Thread.sleep(intervalSecs * 1000)
+
+        file.renameTo(new File(streamDir + "/" + filename + ".txt"))
+        Thread.sleep(streamBatchInterval)
       }
   }
 }
