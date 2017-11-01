@@ -27,6 +27,16 @@ object StreamingMapper {
     document.getElementsByTagName(tag).item(0).getTextContent
   }
 
+  def saveGzip(data: Seq[String], path: String): Unit = {
+    val outputStream = new FileOutputStream(path)
+    val zipOutputStream = new GZIPOutputStream(outputStream)
+
+    while (data.iterator.hasNext) {
+      zipOutputStream.write(data.iterator.next.getBytes)
+    }
+    zipOutputStream.close()
+  }
+
   def bwaRun(inPath: String, outPath: String, bwaPath: String, refPath: String, numThreads: String): Unit = {
     val out = new File(outPath)
     val cmd = Seq(bwaPath, "mem", refPath, "-p", "-t", numThreads, inPath)
@@ -97,15 +107,7 @@ object StreamingMapper {
         // Create tmp file
         val uuid = UUID.randomUUID()
         val tmpFile = s"$tmpDir/chunk_$uuid.fq.gz"
-
-        val outputStream = new FileOutputStream(tmpFile)
-        val zipOutputStream = new GZIPOutputStream(outputStream)
-
-        // Write tmp file
-        while (batch.iterator.hasNext) {
-          zipOutputStream.write(batch.iterator.next.getBytes)
-        }
-        zipOutputStream.close()
+        saveGzip(batch, tmpFile)
 
         // Call BWA
         val outFile = s"$outputDir/chunk_$uuid.sam"
