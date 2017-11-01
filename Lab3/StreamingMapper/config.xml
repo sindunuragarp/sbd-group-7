@@ -5,7 +5,7 @@
 	<numThreads>1</numThreads>
 	<intervalSecs>5</intervalSecs>
 	<streamDir>output/streamDir</streamDir>
-	<inputDir>/home/sindunuragarp/Downloads/fastq_sample</inputDir>
-    <inputDirKova>/data/spark/fastq</inputDirKova>
+	<inputDirLocal>/home/sindunuragarp/Downloads/fastq_sample</inputDirLocal>
+    <inputDir>/data/spark/fastq</inputDir>
 	<outputDir>output/samDir</outputDir>
 </config>
