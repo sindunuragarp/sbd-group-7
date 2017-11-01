@@ -27,15 +27,14 @@ object StreamingMapper {
     document.getElementsByTagName(tag).item(0).getTextContent
   }
 
-  def saveGzip(data: Seq[String], path: String): Unit = {
-    println(s"Saving data chunk to $path")
+  def saveGzip(data: Array[String], path: String): Unit = {
+    val file = new File(path)
+    println("Saving data chunk to " + file.getAbsolutePath)
 
-    val outputStream = new FileOutputStream(path)
+    val outputStream = new FileOutputStream(file)
     val zipOutputStream = new GZIPOutputStream(outputStream)
 
-    while (data.iterator.hasNext) {
-      zipOutputStream.write(data.iterator.next.getBytes)
-    }
+    data.foreach(x => zipOutputStream.write(x.getBytes))
     zipOutputStream.close()
   }
 
