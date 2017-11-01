@@ -65,6 +65,10 @@ object VarDensity {
 			.zipWithIndex()                                                       // pop out the index
 			.map(x => (x._1._1, x._2))
 
+		// (chromosome name, list of region)
+		val regionListData = regionData
+			.map(x => (x._1, regionToList(x._2)))
+
 
 		////////////////////
 
@@ -95,6 +99,14 @@ object VarDensity {
 		math.ceil(length / 1000000).toInt
 	}
 
+	def regionToList(region: Int): (List[Int]) = {
+
+		val regionList = List.range(1, region + 1 )
+
+		regionList
+
+	}
+
 	def textToDbnspData(text: String): (String, Int) = {
 
 		val delimitedText = text.split("\t")
@@ -103,5 +115,7 @@ object VarDensity {
 
 		(chromosome, position)
 	}
+
+
 
 }
