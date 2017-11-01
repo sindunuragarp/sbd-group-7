@@ -54,15 +54,16 @@ object VarDensity {
 				(index, row) => if (index == 0) row.drop(1) else row                // remove header
 			}
 
-		// (chromosome name, length)
-		val dictData = dict
+		// (chromosome name, region)
+		val regionData = dict
 			.map(x => textToDictData(x))
-			.filter(x => !x._1.contains("_"))                                     // remove unnecessary data
+			.filter(x => !x._1.contains("_"))                                     // remove unnecessary chromosome
+			.map(x => (x._1, lengthToRegion(x._2)))                               // convert length to region
 
-		// (chromosome name, (index, region))
-		val indexedData = dictData
+		// (chromosome name, index)
+		val indexData = regionData
 			.zipWithIndex()                                                       // pop out the index
-			.map(x => (x._1._1, (x._2, lengthToRegion(x._1._2))))
+			.map(x => (x._1._1, x._2))
 
 
 		////////////////////
@@ -77,8 +78,6 @@ object VarDensity {
 		val dbnspData = dbnsp
 			.map(x => textToDbnspData(x))
 			.sortBy(x => (x._1, x._2))
-
-		dbnspData.foreach(println)
 
 	}
 
