@@ -34,7 +34,7 @@ object VarDensity {
 		Logger.getLogger("akka").setLevel(Level.OFF)
 
 		println("------------------------------\n\n")
-		calculateDensity(dictFile)
+		calculateDensity(dbsnpFile, dictFile)
 		println("\n\n------------------------------")
 		
 		sc.stop()
@@ -45,30 +45,44 @@ object VarDensity {
 	}
 
 
-	def calculateDensity(inputFile: String): Unit = {
+	def calculateDensity(dbsnpFile: String, dictFile: String): Unit = {
 
 		// (text)
 		val dict = sc
-			.textFile(inputFile)
+			.textFile(dictFile)
 			.mapPartitionsWithIndex{
 				(index, row) => if (index == 0) row.drop(1) else row                // remove header
 			}
 
 		// (chromosome name, length)
-		val data = dict
-			.map(x => textToData(x))
-			.filter(x => !x._1.contains("_"))                                     // filter out unnecessary data
+		val dictData = dict
+			.map(x => textToDictData(x))
+			.filter(x => !x._1.contains("_"))                                     // remove unnecessary data
 
 		// (chromosome name, (index, region))
-		val indexedData = data
+		val indexedData = dictData
 			.zipWithIndex()                                                       // pop out the index
 			.map(x => (x._1._1, (x._2, lengthToRegion(x._1._2))))
 
-		indexedData.foreach(println)
+
+		////////////////////
+
+
+		// (text)
+		val dbnsp = sc
+			.textFile(dbsnpFile)
+			.filter(x => !x.startsWith("#"))                                      // remove header
+
+		// (chromosome name, position)
+		val dbnspData = dbnsp
+			.map(x => textToDbnspData(x))
+			.sortBy(x => (x._1, x._2))
+
+		dbnspData.foreach(println)
 
 	}
 
-	def textToData(text: String): (String, Double) = {
+	def textToDictData(text: String): (String, Double) = {
 
 		val delimitedText = text.split("\t|\\:")
 		val chromosome = delimitedText(2)
@@ -78,6 +92,17 @@ object VarDensity {
 
 	}
 
-	def lengthToRegion(length: Double): Int = math.ceil(length / 1000000).toInt
+	def lengthToRegion(length: Double): Int = {
+		math.ceil(length / 1000000).toInt
+	}
+
+	def textToDbnspData(text: String): (String, Int) = {
+
+		val delimitedText = text.split("\t")
+		val chromosome = delimitedText(0)
+		val position = delimitedText(1).toInt
+
+		(chromosome, position)
+	}
 
 }
