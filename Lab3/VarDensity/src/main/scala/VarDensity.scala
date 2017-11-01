@@ -4,6 +4,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
+import org.apache.spark.rdd.RDD
 
 object VarDensity {
 
@@ -48,6 +49,15 @@ object VarDensity {
 	def calculateDensity(dbsnpFile: String, dictFile: String): Unit = {
 
 		// (text)
+		val dbnsp = sc
+			.textFile(dbsnpFile)
+			.filter(x => !x.startsWith("#"))                                      // remove header
+
+		// (chromosome name, position)
+		val variantData = dbnsp
+			.map(x => textToVariantData(x))
+
+		// (text)
 		val dict = sc
 			.textFile(dictFile)
 			.mapPartitionsWithIndex{
@@ -69,19 +79,15 @@ object VarDensity {
 		val regionListData = regionData
 			.map(x => (x._1, regionToList(x._2)))
 
+	}
 
-		////////////////////
+	def textToVariantData(text: String): (String, Int) = {
 
+		val delimitedText = text.split("\t")
+		val chromosome = delimitedText(0)
+		val position = delimitedText(1).toInt
 
-		// (text)
-		val dbnsp = sc
-			.textFile(dbsnpFile)
-			.filter(x => !x.startsWith("#"))                                      // remove header
-
-		// (chromosome name, position)
-		val variantData = dbnsp
-			.map(x => textToDbnspData(x))
-
+		(chromosome, position)
 	}
 
 	def textToDictData(text: String): (String, Double) = {
@@ -98,23 +104,12 @@ object VarDensity {
 		math.ceil(length / 1000000).toInt
 	}
 
-	def regionToList(region: Int): (List[Int]) = {
+	def regionToList(region: Int): (Seq[Int]) = {
 
-		val regionList = List.range(1, region + 1 )
+		val regionList = Seq.range(1, region + 1 )
 
 		regionList
 
 	}
-
-	def textToDbnspData(text: String): (String, Int) = {
-
-		val delimitedText = text.split("\t")
-		val chromosome = delimitedText(0)
-		val position = delimitedText(1).toInt
-
-		(chromosome, position)
-	}
-
-
 
 }
