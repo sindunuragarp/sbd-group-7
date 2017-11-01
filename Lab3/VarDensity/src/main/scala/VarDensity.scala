@@ -79,9 +79,8 @@ object VarDensity {
 			.filter(x => !x.startsWith("#"))                                      // remove header
 
 		// (chromosome name, position)
-		val dbnspData = dbnsp
+		val variantData = dbnsp
 			.map(x => textToDbnspData(x))
-			.sortBy(x => (x._1, x._2))
 
 	}
 
