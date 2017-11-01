@@ -28,6 +28,8 @@ object StreamingMapper {
   }
 
   def saveGzip(data: Seq[String], path: String): Unit = {
+    println(s"Saving data chunk to $path")
+
     val outputStream = new FileOutputStream(path)
     val zipOutputStream = new GZIPOutputStream(outputStream)
 
@@ -38,10 +40,14 @@ object StreamingMapper {
   }
 
   def bwaRun(inPath: String, outPath: String, bwaPath: String, refPath: String, numThreads: String): Unit = {
+    println(s"Running bwa for $inPath")
+
     val out = new File(outPath)
     val cmd = Seq(bwaPath, "mem", refPath, "-p", "-t", numThreads, inPath)
 
-    (cmd #> out).!
+    val ret = (cmd #> out).!
+
+    println(s"Exited with code $ret")
   }
 
 
