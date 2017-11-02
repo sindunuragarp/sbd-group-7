@@ -54,9 +54,9 @@ object VarDensity {
 			.textFile(dbsnpFile)
 			.filter(x => !x.startsWith("#"))                                      // remove header
 
-		// (chromosome name, position)
-		val variantData = dbnsp
-			.map(x => textToVariantData(x))
+		// (name, position)
+		val positionData = dbnsp
+			.map(x => textToPositionData(x))
 
 		// (text)
 		val dict = sc
@@ -65,45 +65,44 @@ object VarDensity {
 				(index, row) => if (index == 0) row.drop(1) else row                // remove header
 			}
 
-		// (chromosome name, total region)
+		// (name, total region)
 		val totalRegionData = dict
 			.map(x => textToDictData(x))
 			.filter(x => !x._1.contains("_"))                                     // remove unnecessary chromosome
-			.map(x => (x._1, lengthToTotalRegion(x._2)))                               // convert length to region
+			.map(x => (x._1, lengthToTotalRegion(x._2)))                          // convert length to total region
 
-		// (chromosome name, index)
+		// (name, index)
 		val indexData = totalRegionData
-			.zipWithIndex()                                                       // pop out the index
+			.zipWithIndex()                                                       // get the index
 			.map(x => (x._1._1, x._2))
 
 
-		// (chromosome name, list of region)
+		// (name, list of region)
 		val regionListData = totalRegionData
 			.map(x => (x._1, regionToList(x._2)))
 
-		// (chromosome name, region)
+		// (name, region)
 		val regionData = regionListData
 			.flatMap(x => regionListToRegion(x))
 
-
 	}
 
-	def textToVariantData(text: String): (String, Int) = {
+	def textToPositionData(text: String): (String, Int) = {
 
 		val delimitedText = text.split("\t")
-		val chromosome = delimitedText(0)
+		val name = delimitedText(0)
 		val position = delimitedText(1).toInt
 
-		(chromosome, position)
+		(name, position)
 	}
 
 	def textToDictData(text: String): (String, Double) = {
 
 		val delimitedText = text.split("\t|\\:")
-		val chromosome = delimitedText(2)
+		val name = delimitedText(2)
 		val length = delimitedText(4).toDouble
 
-		(chromosome, length)
+		(name, length)
 
 	}
 
