@@ -82,14 +82,6 @@ object VarDensity {
 		val regionListData = regionData
 			.map(x => (x._1, regionToList(x._2)))
 
-
-		val densityData = regionData
-			.map(x => (x._1, regionToVariantDensity(x._1, x._2, variantData)))
-
-
-
-
-
 	}
 
 	def textToVariantData(text: String): (String, Int) = {
@@ -120,33 +112,6 @@ object VarDensity {
 		val regionList = Seq.range(1, region + 1 )
 
 		regionList
-
-	}
-
-	def variantsCalculator(name: String, region: Int, variantData: RDD[(String, Int)]): (Int, Long) = {
-
-		val range = 100
-		val minPosition = range * (region - 1)
-		val maxPosition = range * region - 1
-
-		val variants = variantData
-			.filter(x => x._1.contentEquals(name) && (x._2.>=(minPosition) && x._2.<=(maxPosition)))
-			.count()
-
-		(region, variants)
-
-	}
-
-	def regionToVariantDensity(name: String, totalRegion: Int, variantData: RDD[(String, Int)]): Array[(Int, Long)] = {
-
-		val densityData = ArrayBuffer[(Int, Long)]()
-		val regionList = Seq.range(1, totalRegion + 1)
-
-		for (region <- regionList) {
-			densityData.append(variantsCalculator(name, region, variantData))
-		}
-
-		densityData.toArray
 
 	}
 
