@@ -4,7 +4,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
-import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -66,21 +65,26 @@ object VarDensity {
 				(index, row) => if (index == 0) row.drop(1) else row                // remove header
 			}
 
-		// (chromosome name, region)
-		val regionData = dict
+		// (chromosome name, total region)
+		val totalRegionData = dict
 			.map(x => textToDictData(x))
 			.filter(x => !x._1.contains("_"))                                     // remove unnecessary chromosome
-			.map(x => (x._1, lengthToRegion(x._2)))                               // convert length to region
+			.map(x => (x._1, lengthToTotalRegion(x._2)))                               // convert length to region
 
 		// (chromosome name, index)
-		val indexData = regionData
+		val indexData = totalRegionData
 			.zipWithIndex()                                                       // pop out the index
 			.map(x => (x._1._1, x._2))
 
 
 		// (chromosome name, list of region)
-		val regionListData = regionData
+		val regionListData = totalRegionData
 			.map(x => (x._1, regionToList(x._2)))
+
+		// (chromosome name, region)
+		val regionData = regionListData
+			.flatMap(x => regionListToRegion(x))
+
 
 	}
 
@@ -103,7 +107,7 @@ object VarDensity {
 
 	}
 
-	def lengthToRegion(length: Double): Int = {
+	def lengthToTotalRegion(length: Double): Int = {
 		math.ceil(length / 100).toInt
 	}
 
@@ -113,6 +117,18 @@ object VarDensity {
 
 		regionList
 
+	}
+
+	def regionListToRegion (x: (String, Seq[Int])) : Seq[(String, Int)] = {
+
+		val name = x._1
+		val regionList = x._2
+		val regionData = ArrayBuffer[(String, Int)]()
+
+		for (region <- regionList)
+			regionData.append((name, region))
+
+		regionData
 	}
 
 }
