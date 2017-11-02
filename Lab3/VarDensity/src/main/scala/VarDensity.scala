@@ -58,6 +58,14 @@ object VarDensity {
 		val positionData = dbnsp
 			.map(x => textToPositionData(x))
 
+		// ((name, position), region)
+		val regionData = positionData
+			.map(x => (x, positionToRegionData(x._2)))
+
+
+		//////
+
+
 		// (text)
 		val dict = sc
 			.textFile(dictFile)
@@ -77,12 +85,12 @@ object VarDensity {
 			.map(x => (x._1._1, x._2))
 
 
-		// (name, list of region)
+		// (name, [list of region])
 		val regionListData = totalRegionData
 			.map(x => (x._1, regionToList(x._2)))
 
 		// (name, region)
-		val regionData = regionListData
+		val fullRegionData = regionListData
 			.flatMap(x => regionListToRegion(x))
 
 	}
@@ -96,6 +104,12 @@ object VarDensity {
 		(name, position)
 	}
 
+	def positionToRegionData(position: Int): Int = {
+
+		math.floor(position / 100).toInt + 1
+
+	}
+
 	def textToDictData(text: String): (String, Double) = {
 
 		val delimitedText = text.split("\t|\\:")
@@ -107,7 +121,9 @@ object VarDensity {
 	}
 
 	def lengthToTotalRegion(length: Double): Int = {
+
 		math.ceil(length / 100).toInt
+
 	}
 
 	def regionToList(region: Int): (Seq[Int]) = {
