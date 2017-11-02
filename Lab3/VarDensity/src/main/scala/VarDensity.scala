@@ -103,6 +103,7 @@ object VarDensity {
 		//////
 
 
+		// (name, (region, variant))
 		val mergedData = fullRegionData
 			.leftOuterJoin(variantData)
 			.map(x =>
@@ -111,6 +112,10 @@ object VarDensity {
 				else
 					(x._1._1, (x._1._2, x._2._2.get))
 			)
+
+		// (name, (index, [(region, variant)]))
+		val finalData = indexData
+			.cogroup(mergedData)
 
 	}
 
@@ -125,7 +130,7 @@ object VarDensity {
 
 	def positionToRegionData(position: Int): Int = {
 
-		math.floor(position / 100).toInt + 1
+		math.floor(position / 1000000).toInt + 1
 
 	}
 
@@ -141,7 +146,7 @@ object VarDensity {
 
 	def lengthToTotalRegion(length: Double): Int = {
 
-		math.ceil(length / 100).toInt
+		math.ceil(length / 1000000).toInt
 
 	}
 
