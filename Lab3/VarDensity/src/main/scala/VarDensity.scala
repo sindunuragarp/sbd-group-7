@@ -1,5 +1,7 @@
 /* VarDensity.scala */
 /* Author: Hamid Mushtaq */
+import java.io._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.log4j.Logger
@@ -113,9 +115,14 @@ object VarDensity {
 					(x._1._1, (x._1._2, x._2._2.get))
 			)
 
-		// (name, (index, [(region, variant)]))
-		val finalData = indexData
-			.cogroup(mergedData)
+		// (name, index, region, variant)
+		val finalData = mergedData
+			.join(indexData)
+			.map(x => (x._1, x._2._2, x._2._1._1, x._2._1._2))
+			.collect()
+
+		// write to file
+		writeToFile(finalData, "vardensity.txt")
 
 	}
 
@@ -168,6 +175,23 @@ object VarDensity {
 			regionData.append((name, region))
 
 		regionData
+	}
+
+	def writeToFile(content: Array[(String, Long, Int, Int)], outputFileName: String): Unit = {
+
+		val outputDirectory = "output"
+		new File(outputDirectory).mkdirs
+		val writer = new PrintWriter(new File(outputDirectory + "/" + outputFileName))
+
+		try {
+			content
+				.sortBy(x => (x._2, x._3))
+				.foreach(x => writer.write(x._1 + "|" + x._2 + "|" + x._3 + "|" + x._4 + "\n"))
+		}
+		finally {
+			writer.close()
+		}
+
 	}
 
 }
