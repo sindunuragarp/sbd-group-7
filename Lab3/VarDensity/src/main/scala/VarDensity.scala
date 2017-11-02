@@ -62,6 +62,11 @@ object VarDensity {
 		val regionData = positionData
 			.map(x => (x, positionToRegionData(x._2)))
 
+		// ((name, region), variant)
+		val variantData = regionData
+			.map(x => ((x._1._1, x._2), 1))
+			.reduceByKey(_ + _)
+
 
 		//////
 
@@ -89,9 +94,23 @@ object VarDensity {
 		val regionListData = totalRegionData
 			.map(x => (x._1, regionToList(x._2)))
 
-		// (name, region)
+		// ((name, region), 0)
 		val fullRegionData = regionListData
 			.flatMap(x => regionListToRegion(x))
+			.map(x => (x, 0))                                                     // set 0 as default number
+
+
+		//////
+
+
+		val mergedData = fullRegionData
+			.leftOuterJoin(variantData)
+			.map(x =>
+				if (x._2._2.isEmpty)
+					(x._1._1, (x._1._2, x._2._1))
+				else
+					(x._1._1, (x._1._2, x._2._2.get))
+			)
 
 	}
 
