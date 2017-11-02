@@ -32,7 +32,7 @@ object StreamingMapper {
     val outputStream = new FileOutputStream(file)
     val zipOutputStream = new GZIPOutputStream(outputStream)
 
-    data.foreach(x => zipOutputStream.write(x.getBytes))
+    data.map(_+"\n").foreach(x => zipOutputStream.write(x.getBytes))
     zipOutputStream.close()
   }
 
