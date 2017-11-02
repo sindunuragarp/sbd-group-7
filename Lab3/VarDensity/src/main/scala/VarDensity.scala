@@ -6,6 +6,8 @@ import org.apache.log4j.Logger
 import org.apache.log4j.Level
 import org.apache.spark.rdd.RDD
 
+import scala.collection.mutable.ArrayBuffer
+
 object VarDensity {
 
 	final val compressRDDs = true
@@ -13,22 +15,22 @@ object VarDensity {
 	private val conf = new SparkConf().setAppName("Variant Density Calculator App")
 	private val sc = new SparkContext(conf)
 
-		
+
 	def main(args: Array[String]) {
 		val tasks = args(0)
 		val dbsnpFile = args(1)
 		val dictFile = args(2)
-		
+
 		println(s"Tasks = $tasks\ndbsnpFile = $dbsnpFile\ndictFile = $dictFile\n")
-			
+
 
 		conf.setMaster("local[" + tasks + "]")
 		conf.set("spark.cores.max", tasks)
 		if (compressRDDs)
 			conf.set("spark.rdd.compress", "true")
-		
+
 		val t0 = System.currentTimeMillis
-		
+
 		// Add your main code here
 
 		Logger.getLogger("org").setLevel(Level.OFF)
@@ -37,9 +39,9 @@ object VarDensity {
 		println("------------------------------\n\n")
 		calculateDensity(dbsnpFile, dictFile)
 		println("\n\n------------------------------")
-		
+
 		sc.stop()
-		
+
 		val et = (System.currentTimeMillis - t0) / 1000
 		println("{Time taken = %d mins %d secs}".format(et / 60, et % 60))
 
@@ -75,9 +77,18 @@ object VarDensity {
 			.zipWithIndex()                                                       // pop out the index
 			.map(x => (x._1._1, x._2))
 
+
 		// (chromosome name, list of region)
 		val regionListData = regionData
 			.map(x => (x._1, regionToList(x._2)))
+
+
+		val densityData = regionData
+			.map(x => (x._1, regionToVariantDensity(x._1, x._2, variantData)))
+
+
+
+
 
 	}
 
@@ -101,7 +112,7 @@ object VarDensity {
 	}
 
 	def lengthToRegion(length: Double): Int = {
-		math.ceil(length / 1000000).toInt
+		math.ceil(length / 100).toInt
 	}
 
 	def regionToList(region: Int): (Seq[Int]) = {
@@ -109,6 +120,33 @@ object VarDensity {
 		val regionList = Seq.range(1, region + 1 )
 
 		regionList
+
+	}
+
+	def variantsCalculator(name: String, region: Int, variantData: RDD[(String, Int)]): (Int, Long) = {
+
+		val range = 100
+		val minPosition = range * (region - 1)
+		val maxPosition = range * region - 1
+
+		val variants = variantData
+			.filter(x => x._1.contentEquals(name) && (x._2.>=(minPosition) && x._2.<=(maxPosition)))
+			.count()
+
+		(region, variants)
+
+	}
+
+	def regionToVariantDensity(name: String, totalRegion: Int, variantData: RDD[(String, Int)]): Array[(Int, Long)] = {
+
+		val densityData = ArrayBuffer[(Int, Long)]()
+		val regionList = Seq.range(1, totalRegion + 1)
+
+		for (region <- regionList) {
+			densityData.append(variantsCalculator(name, region, variantData))
+		}
+
+		densityData.toArray
 
 	}
 
