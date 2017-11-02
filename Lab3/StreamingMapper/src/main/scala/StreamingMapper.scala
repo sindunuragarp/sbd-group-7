@@ -12,7 +12,7 @@ import org.w3c.dom.Document
 import sys.process._
 
 object StreamingMapper {
-  val streamBatchSize = 200
+  val streamBatchSize = 1000
   val streamBatchInterval = 50 //milliseconds
 
 
@@ -29,8 +29,6 @@ object StreamingMapper {
 
   def saveGzip(data: Array[String], path: String): Unit = {
     val file = new File(path)
-    println("Saving data chunk to " + file.getAbsolutePath)
-
     val outputStream = new FileOutputStream(file)
     val zipOutputStream = new GZIPOutputStream(outputStream)
 
@@ -44,9 +42,7 @@ object StreamingMapper {
     val out = new File(outPath)
     val cmd = Seq(bwaPath, "mem", refPath, "-p", "-t", numThreads, inPath)
 
-    val ret = (cmd #> out).!
-
-    println(s"Exited with code $ret")
+    (cmd #> out).!
   }
 
 
