@@ -13,12 +13,14 @@ import sys.process._
 
 object StreamingMapper {
   val streamBatchSize = 1000
-  val streamBatchInterval = 50 //milliseconds
+  val streamBatchInterval = 100 //milliseconds
 
 
   ////
 
-
+  /*
+   * Basic utility functions
+   */
   def getTimeStamp: String = {
     new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime)
   }
@@ -27,6 +29,9 @@ object StreamingMapper {
     document.getElementsByTagName(tag).item(0).getTextContent
   }
 
+  /*
+   * Accepts an array of string and compresses it to a gzip file
+   */
   def saveGzip(data: Array[String], path: String): Unit = {
     val file = new File(path)
     val outputStream = new FileOutputStream(file)
@@ -36,6 +41,9 @@ object StreamingMapper {
     zipOutputStream.close()
   }
 
+  /*
+   * Runs the BWA using a gzip input and saves it as a sam file
+   */
   def bwaRun(inPath: String, outPath: String, bwaPath: String, refPath: String, numThreads: String): Unit = {
     println(s"Running bwa for $inPath")
 
@@ -90,27 +98,33 @@ object StreamingMapper {
 
     //////////////////////////////////////////////////////////////////////
 
+    // Prepares the streaming context
     sparkConf.setMaster("local[" + numTasks + "]")
     sparkConf.set("spark.cores.max", numTasks)
     val ssc = new StreamingContext(sparkConf, Seconds(intervalSecs))
+
+    // Creates thread for running the driver
     val driver = new Thread {
       override def run(): Unit = runDriver(inputDir, streamDir, tmpDir)
     }
 
-    //////////////////////////////////////////////////////////////////////
-
+    // Batches text data every interval, and then processes each rdd batch
     ssc.textFileStream("file://" + streamDirFile.getAbsolutePath)
       .foreachRDD(rdd => {
+
+        // batch = Array[lines]
         val batch = rdd.collect()
+
+        // fastq format from driver is already valid, therefore one read = 4 consequent lines
         val size = batch.length / 4
         println(s"Processing $size reads")
 
-        // Create tmp file
+        // Creates tmp gzip file for input to BWA
         val uuid = UUID.randomUUID()
         val tmpFile = s"$tmpDir/chunk_$uuid.fq.gz"
         saveGzip(batch, tmpFile)
 
-        // Call BWA
+        // Calls BWA to process tmp file
         val outFile = s"$outputDir/chunk_$uuid.sam"
         bwaRun(tmpFile, outFile, bwaPath, refPath, numThreads)
         new File(tmpFile).delete()
@@ -118,8 +132,11 @@ object StreamingMapper {
 
     //////////////////////////////////////////////////////////////////////
 
+    // Starts both streaming context and driver
     ssc.start()
     driver.start()
+
+    // Waits for driver to finish sending all data, and then terminates streaming after timeout
     driver.join()
     ssc.awaitTerminationOrTimeout(intervalSecs * 5)
 
@@ -133,34 +150,50 @@ object StreamingMapper {
   ////
 
 
+  /*
+   * Driver function reads the fastq files using custom iterator and interleaves each read
+   * Iterator is lazy therefore able to process large files efficiently
+   */
   def runDriver(inputDir: String, streamDir: String, tmpDir: String): Unit = {
     println("Starting driver")
 
+    // Reads the fastq file pairs
     val dir = new File(inputDir)
     if (!dir.exists() || !dir.isDirectory) {
       println("Input directory doesn't exist!")
       return
     }
 
+    // Sorts file by name to properly get first and second fastq file
+    // Assumes there are only two fastq file in the directory and it is named ***1.fastq and ***2.fastq
     val files = dir.listFiles().sortBy(x => x.getName)
+
+    // Custom iterator to read valid inputs based on fastq format
     val file1 = new FastqIterator(files(0))
     val file2 = new FastqIterator(files(1))
 
+    // Interleaves the file by zipping each subsequent read, and writes the result in small chunks
     file1.zip(file2)
       .grouped(streamBatchSize)
       .zipWithIndex
       .foreach{case(tuples, index) =>
+
+        // File is written to tmp directory
         val filename = "stream_fastq_" + index
         val file = new File(tmpDir + "/" + filename + ".tmp")
         val bw = new BufferedWriter(new FileWriter(file))
 
+        // Writes the file incrementally on each read
         tuples.foreach{case(a,b) =>
           bw.write(a + "\n")
           bw.write(b + "\n")
         }
         bw.close()
 
+        // Moves completed file to stream directory so that it gets detected by the stream
         file.renameTo(new File(streamDir + "/" + filename + ".txt"))
+
+        // Adds streaming interval to simulate streaming delay
         Thread.sleep(streamBatchInterval)
       }
   }
