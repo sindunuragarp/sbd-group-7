@@ -1,11 +1,14 @@
 /* VarDensity.scala */
 /* Author: Hamid Mushtaq */
 import java.io._
+import java.text.SimpleDateFormat
+import java.util.Calendar
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.log4j.Logger
 import org.apache.log4j.Level
+import org.apache.spark.scheduler._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -15,6 +18,8 @@ object VarDensity {
 
 	private val conf = new SparkConf().setAppName("Variant Density Calculator App")
 	private val sc = new SparkContext(conf)
+
+	final val bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("output/sparkLog.txt"), "UTF-8"))
 
 
 	def main(args: Array[String]) {
@@ -40,6 +45,35 @@ object VarDensity {
 		println("------------------------------\n\n")
 		calculateDensity(dbsnpFile, dictFile)
 		println("\n\n------------------------------")
+
+		//////
+
+		sc.addSparkListener(new SparkListener() {
+			override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
+				bw.write(getTimeStamp + " Spark ApplicationStart: " + applicationStart.appName + "\n")
+				bw.flush()
+			}
+
+			override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
+				bw.write(getTimeStamp + " Spark ApplicationEnd: " + applicationEnd.time + "\n")
+				bw.flush()
+			}
+
+			override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+				val map = stageCompleted.stageInfo.rddInfos
+				map.foreach(row => {
+					if (row.isCached) {
+						bw.write(getTimeStamp + row.name + ": memsize = " + (row.memSize / 1000000) + "MB, rdd diskSize " +
+							row.diskSize + ", numPartitions = " + row.numPartitions + "-" + row.numCachedPartitions + "\n")
+					}
+					else if (row.name.contains("rdd_"))
+						bw.write(getTimeStamp + row.name + " processed!\n")
+					bw.flush()
+				})
+			}
+		})
+
+		//////
 
 		sc.stop()
 
@@ -192,6 +226,10 @@ object VarDensity {
 			writer.close()
 		}
 
+	}
+
+	def getTimeStamp: String = {
+		"[" + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime) + "] "
 	}
 
 }
