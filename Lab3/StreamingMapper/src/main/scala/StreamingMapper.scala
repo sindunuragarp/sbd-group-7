@@ -121,7 +121,7 @@ object StreamingMapper {
     ssc.start()
     driver.start()
     driver.join()
-    ssc.awaitTermination()
+    ssc.awaitTerminationOrTimeout(intervalSecs * 5)
 
     // Delete temporary directory
     val tmpDirFile = new File(tmpDir)
