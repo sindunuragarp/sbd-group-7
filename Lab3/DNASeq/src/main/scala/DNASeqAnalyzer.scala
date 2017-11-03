@@ -24,8 +24,17 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  // Read the SAM files generated from part 2
+  def bwaRead(x: String): Array[(Int, SAMRecord)] = {
 
-  // TODO : change to bwaRead
+    val bwaKeyValues = new BWAKeyValues(x)
+    bwaKeyValues.parseSam()
+    val kvPairs: Array[(Int, SAMRecord)] = bwaKeyValues.getKeyValuePairs()
+
+    kvPairs
+  }
+
+  // Deprecated
   def bwaRun(x: String, bcconfig: Broadcast[Configuration]): Array[(Int, SAMRecord)] = {
     val config = bcconfig.value
     val refFolder = config.getRefFolder
@@ -345,7 +354,7 @@ object DNASeqAnalyzer {
 
     /** ***********************************/
 
-    val bwaResults = files.flatMap(files => bwaRun(files.getPath, bcconfig))
+    val bwaResults = files.flatMap(files => bwaRead(files.getPath))
       .combineByKey(
         (sam: SAMRecord) => Array(sam),
         (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
