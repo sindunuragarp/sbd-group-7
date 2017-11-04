@@ -19,10 +19,23 @@ object DNASeqAnalyzer {
   final val RefFileName = "ucsc.hg19.fasta"
   final val SnpFileName = "dbsnp_138.hg19.vcf"
   final val ExomeFileName = "gcat_set_025.bed"
+  final val VarDensityFileName = "vardensity.txt"
   val bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("sparkListener.txt"), "UTF-8"))
 
 
   //////////////////////////////////////////////////////////////////////////////
+
+  // Splits variant density texts
+  def textToVariantData(text: String): (String, Int, Int, Int) = {
+
+    val delimitedText = text.split("\\|")
+    val name = delimitedText(0)
+    val index = delimitedText(1).toInt
+    val region = delimitedText(2).toInt
+    val variant = delimitedText(3).toInt
+
+    (name, index, region, variant)
+  }
 
   // Reads SAM files generated from part 2
   def bwaRead(x: String): Array[(Int, SAMRecord)] = {
@@ -354,6 +367,18 @@ object DNASeqAnalyzer {
 
     /*************************************/
 
+    // (texts)
+    val vardensity = sc
+      .textFile(VarDensityFileName)
+      .map(x => textToVariantData(x))
+
+    // (index, variants)
+    val chromosomeVariant = vardensity
+      .map(x => (x._2, x._4))
+      .reduceByKey(_ + _)
+
+    /*************************************/
+
     // (chromosome number, [SAM records])
     val bwaResults = files
       .flatMap(files => bwaRead(files.getPath))
@@ -365,13 +390,20 @@ object DNASeqAnalyzer {
       .persist(MEMORY_ONLY_SER) //cache
     bwaResults.setName("rdd_bwaResults")
 
-    // (total number of SAM records, chromosome number)
+    // (chromosome number, total number of SAM records)
     val loadPerChromosome = bwaResults
       .map { case (key, values) => (values.length, key) }
-      .collect
+      .map(x => (x._2, x._1))
+
+    // (new weight, chromosome number)
+    val newLoadPerChromosome = chromosomeVariant
+      .join(loadPerChromosome)
+      .map(x => (x._1, x._2._1.toLong * x._2._2.toLong / 1000000))
+      .map(x => (x._2.toInt, x._1))
+      .collect()
 
     // ([chromosome number])
-    val loadMap = loadBalancer(loadPerChromosome, numInstances)
+    val loadMap = loadBalancer(newLoadPerChromosome, numInstances)
 
     // (instance index, [SAM records])
     val loadBalancedRdd = bwaResults
