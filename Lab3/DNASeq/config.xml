@@ -1,4 +1,5 @@
 <configuration>
+	<varFolder>/data/username/var</varFolder>>
 	<refFolder>/data/spark/ref</refFolder>
 	<toolsFolder>/data/spark/tools</toolsFolder>
 	<tmpFolder>/data/username/tmp</tmpFolder>

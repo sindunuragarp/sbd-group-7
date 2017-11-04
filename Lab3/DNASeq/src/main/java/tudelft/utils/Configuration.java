@@ -30,6 +30,7 @@ import java.lang.System;
 
 public class Configuration implements Serializable
 {
+	private String varFolder;
 	private String refFolder;
 	private String toolsFolder;
 	private String tmpFolder;
@@ -50,7 +51,8 @@ public class Configuration implements Serializable
 			DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
 			Document document = documentBuilder.parse(file);
-			
+
+			varFolder = correctFolderName(document.getElementsByTagName("varFolder").item(0).getTextContent());
 			refFolder = correctFolderName(document.getElementsByTagName("refFolder").item(0).getTextContent());
 			toolsFolder = correctFolderName(document.getElementsByTagName("toolsFolder").item(0).getTextContent());
 			tmpFolder = correctFolderName(document.getElementsByTagName("tmpFolder").item(0).getTextContent());
@@ -90,7 +92,12 @@ public class Configuration implements Serializable
 	{
 		return dict;
 	}
-	
+
+	public String getVarFolder()
+	{
+		return varFolder;
+	}
+
 	public String getRefFolder()
 	{
 		return refFolder;
@@ -158,6 +165,7 @@ public class Configuration implements Serializable
 	public void print()
 	{
 		System.out.println("***** Configuration *****");
+		System.out.println("varFolder:\t" + varFolder);
 		System.out.println("refFolder:\t" + refFolder);
 		System.out.println("toolsFolder:\t" + toolsFolder);
 		System.out.println("tmpFolder:\t" + tmpFolder);

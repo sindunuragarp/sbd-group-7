@@ -299,6 +299,7 @@ object DNASeqAnalyzer {
     val numInstances = Integer.parseInt(config.getNumInstances)
     val inputFolder = config.getInputFolder
     val outputFolder = config.getOutputFolder
+    val varFolder = config.getVarFolder
 
     /*************************************/
 
@@ -369,7 +370,7 @@ object DNASeqAnalyzer {
 
     // (texts)
     val vardensity = sc
-      .textFile(VarDensityFileName)
+      .textFile(varFolder + VarDensityFileName)
       .map(x => textToVariantData(x))
 
     // (index, variants)
