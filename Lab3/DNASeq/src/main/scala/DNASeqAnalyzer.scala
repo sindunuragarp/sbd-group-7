@@ -24,7 +24,7 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
-  // Read the SAM files generated from part 2
+  // Reads SAM files generated from part 2
   def bwaRead(x: String): Array[(Int, SAMRecord)] = {
 
     val bwaKeyValues = new BWAKeyValues(x)
@@ -254,7 +254,7 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
-
+  // Runs load balancing among the instances
   def loadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
     val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[Int]())
     val sizes = ArrayBuffer.fill(numTasks)(0)
@@ -352,26 +352,39 @@ object DNASeqAnalyzer {
     println("inputFolder = " + inputFolder + ", list of files = ")
     files.collect.foreach(x => println(x))
 
-    /** ***********************************/
+    /*************************************/
 
-    val bwaResults = files.flatMap(files => bwaRead(files.getPath))
+    // (chromosome number, [SAM records])
+    val bwaResults = files
+      .flatMap(files => bwaRead(files.getPath))
       .combineByKey(
         (sam: SAMRecord) => Array(sam),
         (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
         (acc1: Array[SAMRecord], acc2: Array[SAMRecord]) => acc1 ++ acc2
-      ).persist(MEMORY_ONLY_SER) //cache
+      )
+      .persist(MEMORY_ONLY_SER) //cache
     bwaResults.setName("rdd_bwaResults")
 
-    val loadPerChromosome = bwaResults.map { case (key, values) => (values.length, key) }.collect
+    // (total number of SAM records, chromosome number)
+    val loadPerChromosome = bwaResults
+      .map { case (key, values) => (values.length, key) }
+      .collect
+
+    // ([chromosome number])
     val loadMap = loadBalancer(loadPerChromosome, numInstances)
 
-    val loadBalancedRdd = bwaResults.map{ case(key, values) =>
-      (loadMap.indexWhere((a: ArrayBuffer[Int]) => a.contains(key)), values)
-    }.reduceByKey(_ ++ _)
+    // (instance index, [SAM records])
+    val loadBalancedRdd = bwaResults
+      .map{
+        case(key, values) =>
+        (loadMap.indexWhere((a: ArrayBuffer[Int]) => a.contains(key)), values)
+      }
+      .reduceByKey(_ ++ _)
     loadBalancedRdd.setName("rdd_loadBalancedRdd")
 
     val variantCallData = loadBalancedRdd
-      .flatMap { case(key, sams) =>
+      .flatMap {
+        case(key, sams) =>
         variantCall(key, sams, bcconfig)
       }
     variantCallData.setName("rdd_variantCallData")
