@@ -150,24 +150,15 @@ object DNASeqAnalyzer {
       }
     })
 
-    /*************************************/
-
     val t0 = System.currentTimeMillis
+
+    /*************************************/// Read BWA Results
 
     val files = sc.parallelize(new File(inputFolder).listFiles, numInstances)
     files.cache
 
     println("inputFolder = " + inputFolder + ", list of files = ")
     files.collect.foreach(x => println(x))
-
-    /*************************************/
-
-    // (name, index, region, variants)
-    val vardensity = sc
-      .textFile(varFolder + VarDensityFileName)
-      .map(x => textToVariantData(x))
-
-    /*************************************/
 
     // (chromosome number, [SAM records])
     val bwaResults = files
@@ -180,10 +171,17 @@ object DNASeqAnalyzer {
       .persist(MEMORY_ONLY_SER) //cache
     bwaResults.setName("rdd_bwaResults")
 
+    /*************************************/// Load Balancing
+
     // (total number of SAM records, chromosome number)
     val loadPerChromosome = bwaResults
       .map { case (key, values) => (values.length, key) }
       .collect
+
+    // (name, index, region, variants)
+    val vardensity = sc
+      .textFile(varFolder + VarDensityFileName)
+      .map(x => textToVariantData(x))
 
     // ([chromosome number])
     val loadMap = loadBalancer(loadPerChromosome, numInstances)
@@ -196,6 +194,8 @@ object DNASeqAnalyzer {
       }
       .reduceByKey(_ ++ _)
     loadBalancedRdd.setName("rdd_loadBalancedRdd")
+
+    /*************************************/// Variant Call
 
     val variantCallData = loadBalancedRdd
       .flatMap {
@@ -211,7 +211,7 @@ object DNASeqAnalyzer {
     ).cache
     results.setName("rdd_results")
 
-    /*************************************/
+    /*************************************/// Print Output
 
     val fl = new PrintWriter(new File(outputFolder + "output.vcf"))
     (1 to 24).foreach(i => {
