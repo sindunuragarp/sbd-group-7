@@ -85,22 +85,22 @@ object VarDensity {
 		// (text)
 		val dbnsp = sc
 			.textFile(dbsnpFile)
-			.filter(x => !x.startsWith("#"))                                      // remove header
+			.filter(record => !record.startsWith("#"))                            // remove header
 		dbnsp.setName("rdd_dbnsp")
 
-		// (name, position)
+		// (chromosome-name, position)
 		val positionData = dbnsp
 			.map(x => textToPositionData(x))
 		positionData.setName("rdd_positionData")
 
-		// ((name, position), region)
+		// ((chromosome-name, position), chromosome-region)
 		val regionData = positionData
-			.map(x => (x, positionToRegionData(x._2)))
+		  .map { case (name, position) => ((name, position), positionToRegionData(position)) }
 		regionData.setName("rdd_regionData")
 
-		// ((name, region), variant)
+		// ((chromosome-name, chromosome-region), variant)
 		val variantData = regionData
-			.map(x => ((x._1._1, x._2), 1))
+		  .map { case ((name, position), region) => ((name, region), 1)}
 			.reduceByKey(_ + _)
 		variantData.setName("rdd_variantData")
 
@@ -116,53 +116,55 @@ object VarDensity {
 			}
 		dict.setName("rdd_dict")
 
-		// (name, total region)
+		// (chromosome-name, total-chromosome-region)
 		val totalRegionData = dict
-			.map(x => textToDictData(x))
-			.filter(x => !x._1.contains("_"))                                     // remove unnecessary chromosome
-			.map(x => (x._1, lengthToTotalRegion(x._2)))                          // convert length to total region
+		  .map(record => textToDictData(record))
+		  .filter { case (name, length) => !name.contains("_")}                 // remove unnecessary chromosome
+		  .map { case (name, length) => (name, lengthToTotalRegion(length)) }   // convert length to total region
     totalRegionData.persist(if (compressRDDs) MEMORY_ONLY_SER else MEMORY_ONLY)
     totalRegionData.setName("rdd_totalRegionData")
 
-		// (name, index)
+		// (chromosome-name, chromosome-index)
 		val indexData = totalRegionData
 			.zipWithIndex()                                                       // get the index
-			.map(x => (x._1._1, x._2))
+		  .map { case ((name, region), index) => (name, index) }
 		indexData.setName("rdd_indexData")
 
-		// (name, [list of region])
+		// (chromosome-name, [chromosome-region])
 		val regionListData = totalRegionData
-			.map(x => (x._1, regionToList(x._2)))
+		  .map { case (name, region) => (name, regionToList(region)) }
 		regionListData.setName("rdd_regionListData")
 
-		// ((name, region), 0)
+		// ((chromosome-name, chromosome-region), 0)
 		val fullRegionData = regionListData
-			.flatMap(x => regionListToRegion(x))
-			.map(x => (x, 0))                                                     // set 0 as default number
+			.flatMap(list => regionListToRegion(list))
+		  .map { case (name, region) => ((name, region), 0) }                   // set 0 as default number
 		fullRegionData.setName("rdd_fullRegionData")
 
 
 		////
 
 
-		// (name, (region, variant))
+		// (chromosome-name, (chromosome-region, variant))
 		val mergedData = fullRegionData
 			.leftOuterJoin(variantData)
-			.map(x =>
-				if (x._2._2.isEmpty)
-					(x._1._1, (x._1._2, x._2._1))
-				else
-					(x._1._1, (x._1._2, x._2._2.get))
-			)
+		  .map { case ((name, region), (zero, variant)) =>
+					if (variant.isEmpty)
+						(name, (region, zero))
+					else
+						(name, (region, variant.get))
+			}
 		mergedData.setName("rdd_mergedData")
 
-		// (name, index, region, variant)
+		// (chromosome-name, chromosome-index, chromosome-region, variant)
 		val finalData = mergedData
 			.join(indexData)
-			.map(x => (x._1, x._2._2, x._2._1._1, x._2._1._2))
+		  .map { case (name, ((region, variant), index)) =>
+				(name, index, region, variant)
+			}
 			.collect()
 
-		// write to file
+		// Writes to file
 		writeToFile(finalData, "vardensity.txt")
 
 	}
@@ -199,9 +201,9 @@ object VarDensity {
 		Seq.range(1, region + 1 )
 	}
 
-	def regionListToRegion (x: (String, Seq[Int])) : Seq[(String, Int)] = {
-		val name = x._1
-		val regionList = x._2
+	def regionListToRegion (input: (String, Seq[Int])) : Seq[(String, Int)] = {
+		val name = input._1
+		val regionList = input._2
 		val regionData = ArrayBuffer[(String, Int)]()
 
 		for (region <- regionList) {
@@ -218,8 +220,10 @@ object VarDensity {
 
 		try {
 			content
-				.sortBy(x => (x._2, x._3))
-				.foreach(x => writer.write(x._1 + "|" + x._2 + "|" + x._3 + "|" + x._4 + "\n"))
+				.sortBy { case (name, index, region, variant) => (index, region) }
+				.foreach { case (name, index, region, variant) =>
+					writer.write(name + "|" + index + "|" + region + "|" + variant + "\n")
+				}
 		}
 		finally {
 			writer.close()
