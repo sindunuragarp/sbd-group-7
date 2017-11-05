@@ -9,7 +9,7 @@ import org.apache.spark._
 import org.apache.spark.streaming._
 import org.w3c.dom.Document
 
-import sys.process._
+import scala.sys.process._
 
 object StreamingMapper {
   val streamBatchSize = 500
