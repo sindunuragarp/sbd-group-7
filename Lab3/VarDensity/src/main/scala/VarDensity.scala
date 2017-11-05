@@ -1,17 +1,19 @@
-/* VarDensity.scala */
-/* Author: Hamid Mushtaq */
 import java.io._
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.log4j.{Logger, Level}
+import org.apache.log4j.{Level, Logger}
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.StorageLevel.{MEMORY_ONLY, MEMORY_ONLY_SER}
+import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
 
-object VarDensity {
 
+////
+
+
+object VarDensity {
 	final val compressRDDs = true
 
 	private val conf = new SparkConf().setAppName("Variant Density Calculator App")
@@ -19,6 +21,7 @@ object VarDensity {
 
 	final val bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("output/sparkLog.txt"), "UTF-8"))
 
+	////
 
 	def main(args: Array[String]) {
 		val tasks = args(0)
@@ -27,20 +30,17 @@ object VarDensity {
 
 		println(s"Tasks = $tasks\ndbsnpFile = $dbsnpFile\ndictFile = $dictFile\n")
 
-
 		conf.setMaster("local[" + tasks + "]")
 		conf.set("spark.cores.max", tasks)
 		if (compressRDDs)
 			conf.set("spark.rdd.compress", "true")
 
-		val t0 = System.currentTimeMillis
-
-		// Add your main code here
-
 		Logger.getLogger("org").setLevel(Level.OFF)
 		Logger.getLogger("akka").setLevel(Level.OFF)
 
-		//////
+    val t0 = System.currentTimeMillis
+
+		////
 
 		sc.addSparkListener(new SparkListener() {
 			override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
@@ -67,7 +67,7 @@ object VarDensity {
 			}
 		})
 
-		//////
+		////
 
 		println("------------------------------\n\n")
 		calculateDensity(dbsnpFile, dictFile)
@@ -77,7 +77,6 @@ object VarDensity {
 
 		val et = (System.currentTimeMillis - t0) / 1000
 		println("{Time taken = %d mins %d secs}".format(et / 60, et % 60))
-
 	}
 
 
@@ -106,7 +105,7 @@ object VarDensity {
 		variantData.setName("rdd_variantData")
 
 
-		//////
+		////
 
 
 		// (text)
@@ -122,14 +121,14 @@ object VarDensity {
 			.map(x => textToDictData(x))
 			.filter(x => !x._1.contains("_"))                                     // remove unnecessary chromosome
 			.map(x => (x._1, lengthToTotalRegion(x._2)))                          // convert length to total region
-		totalRegionData.setName("rdd_totalRegionData")
+    totalRegionData.persist(if (compressRDDs) MEMORY_ONLY_SER else MEMORY_ONLY)
+    totalRegionData.setName("rdd_totalRegionData")
 
 		// (name, index)
 		val indexData = totalRegionData
 			.zipWithIndex()                                                       // get the index
 			.map(x => (x._1._1, x._2))
 		indexData.setName("rdd_indexData")
-
 
 		// (name, [list of region])
 		val regionListData = totalRegionData
@@ -143,7 +142,7 @@ object VarDensity {
 		fullRegionData.setName("rdd_fullRegionData")
 
 
-		//////
+		////
 
 
 		// (name, (region, variant))
@@ -168,8 +167,11 @@ object VarDensity {
 
 	}
 
-	def textToPositionData(text: String): (String, Int) = {
 
+  ////
+
+
+	def textToPositionData(text: String): (String, Int) = {
 		val delimitedText = text.split("\t")
 		val name = delimitedText(0)
 		val position = delimitedText(1).toInt
@@ -178,49 +180,38 @@ object VarDensity {
 	}
 
 	def positionToRegionData(position: Int): Int = {
-
 		math.floor(position / 1000000).toInt + 1
-
 	}
 
 	def textToDictData(text: String): (String, Double) = {
-
 		val delimitedText = text.split("\t|\\:")
 		val name = delimitedText(2)
 		val length = delimitedText(4).toDouble
 
 		(name, length)
-
 	}
 
 	def lengthToTotalRegion(length: Double): Int = {
-
 		math.ceil(length / 1000000).toInt
-
 	}
 
 	def regionToList(region: Int): (Seq[Int]) = {
-
-		val regionList = Seq.range(1, region + 1 )
-
-		regionList
-
+		Seq.range(1, region + 1 )
 	}
 
 	def regionListToRegion (x: (String, Seq[Int])) : Seq[(String, Int)] = {
-
 		val name = x._1
 		val regionList = x._2
 		val regionData = ArrayBuffer[(String, Int)]()
 
-		for (region <- regionList)
-			regionData.append((name, region))
+		for (region <- regionList) {
+      regionData.append((name, region))
+    }
 
 		regionData
 	}
 
 	def writeToFile(content: Array[(String, Long, Int, Int)], outputFileName: String): Unit = {
-
 		val outputDirectory = "output"
 		new File(outputDirectory).mkdirs
 		val writer = new PrintWriter(new File(outputDirectory + "/" + outputFileName))
@@ -233,11 +224,13 @@ object VarDensity {
 		finally {
 			writer.close()
 		}
-
 	}
+
+
+  ////
+
 
 	def getTimeStamp: String = {
 		"[" + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime) + "] "
 	}
-
 }
