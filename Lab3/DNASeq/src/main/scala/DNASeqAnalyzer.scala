@@ -184,7 +184,7 @@ object DNASeqAnalyzer {
       .map(x => textToVariantData(x))
 
     // ([chromosome number])
-    val loadMap = loadBalancer(loadPerChromosome, numInstances)
+    val loadMap = oldLoadBalancer(loadPerChromosome, numRegions)
 
     // (instance index, [SAM records])
     val loadBalancedRdd = bwaResults
@@ -242,7 +242,7 @@ object DNASeqAnalyzer {
 
 
   // Runs load balancing among the instances
-  def loadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
+  def oldLoadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
     val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[Int]())
     val sizes = ArrayBuffer.fill(numTasks)(0)
 
