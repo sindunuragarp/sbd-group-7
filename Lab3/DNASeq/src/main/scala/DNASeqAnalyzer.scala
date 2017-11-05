@@ -174,7 +174,9 @@ object DNASeqAnalyzer {
     // ((chromosome, region), [reads])
     val bwaResults = files
       .flatMap(files => readSAM(files.getPath))
-      .map(x => ((x._1, positionToRegionData(x._2.getAlignmentStart)), x._2))
+      .map { case (chromosome, reads) =>
+        ((chromosome, positionToRegionData(reads.getAlignmentStart)), reads)
+      }
       .combineByKey(
         (sam: SAMRecord) => Array(sam),
         (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
@@ -192,36 +194,36 @@ object DNASeqAnalyzer {
 
     // Maximum reads
     val maxLoad = loadPerRegion
-      .map(x => x._2)
+      .map { case (key, value) => value }
       .max()
 
     // ((chromosome, region), scaled reads)
     val scaledLoadPerRegion = loadPerRegion
-      .map(x => (x._1, calculateScaledValue(x._2, maxLoad)))
+      .map { case (key, value) => (key, calculateScaledValue(value, maxLoad)) }
 
     // ((chromosome, region), variants)
     val variantData = sc
       .textFile(varFolder + VarDensityFileName)
-      .map(x => textToVariantData(x))
+      .map(text => textToVariantData(text))
       .map { case (index, region, variants) => ((index, region), variants) }
 
     // Maximum variants
     val maxVariant = variantData
-      .map(x => x._2)
+      .map { case (key, value) => value }
       .max()
 
     // ((chromosome, region), scaled variants)
     val scaledVariantData = variantData
-      .map(x => (x._1, calculateScaledValue(x._2, maxVariant)))
+      .map { case (key, value) => (key, calculateScaledValue(value, maxVariant)) }
 
     // ((chromosome, region), weights)
-    val newLoadPerRegion = scaledLoadPerRegion
+    val weightPerRegion = scaledLoadPerRegion
       .join(scaledVariantData)
-      .map { case ((index, region), (load, variants)) => ((index, region), load + variants)}
+      .map { case ((index, region), (load, variants)) => ((index, region), load + variants) }
       .collect
 
     // ([[(chromosome, region)]])
-    val loadMap = loadBalancer(newLoadPerRegion, numRegions)
+    val loadMap = loadBalancer(weightPerRegion, numRegions)
 
     // (task, [reads])
     val loadBalancedRdd = bwaResults
@@ -296,9 +298,9 @@ object DNASeqAnalyzer {
   }
 
   // Runs load balancing with known variants
-  def loadBalancer(weights: Array[((Int, Int), Double)], numTasks: Int): ArrayBuffer[ArrayBuffer[(Int, Int)]] = {
-    val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[(Int, Int)]())
-    val sizes = ArrayBuffer.fill(numTasks)(0.0)
+  def loadBalancer(weights: Array[((Int, Int), Double)], numRegions: Int): ArrayBuffer[ArrayBuffer[(Int, Int)]] = {
+    val results = ArrayBuffer.fill(numRegions)(ArrayBuffer[(Int, Int)]())
+    val sizes = ArrayBuffer.fill(numRegions)(0.0)
 
     // Calculates the load
     val totalWeights = weights
@@ -306,18 +308,18 @@ object DNASeqAnalyzer {
       .reduce(_ + _)
 
     // Calculates threshold for each task
-    val threshold = totalWeights / numTasks
+    val threshold = totalWeights / numRegions
 
     // Assign region to tasks
     weights
-      .sortBy{ case((index, region), weight) => (index, region) }
-      .foreach{ case((index, region), weight) =>
-        val task = sizes
+      .sortBy{ case((chromosome, region), weight) => (chromosome, region) }
+      .foreach{ case((chromosome, region), weight) =>
+        val index = sizes
           .zipWithIndex
           .filter(x => x._1 < threshold)
           .min._2
-        sizes(task) += weight
-        results(task).append((index, region))
+        sizes(index) += weight
+        results(index).append((chromosome, region))
       }
 
     results
@@ -327,6 +329,7 @@ object DNASeqAnalyzer {
   //////////////////////////////////////////////////////////////////////////////
 
 
+  // Runs variant call
   def variantCall(chrRegion: Int, samRecords: Array[SAMRecord], bcconfig: Broadcast[Configuration]): Array[(Int, (Int, String))] = {
     val config = bcconfig.value
     val tmpFolder = config.getTmpFolder
@@ -497,6 +500,7 @@ object DNASeqAnalyzer {
   ////
 
 
+  // Logs each command
   def writeProcessLogs(processName: String, chrRegion: Int, stdout: StringBuilder, stderr: StringBuilder): Unit = {
 
     // Prepare file
