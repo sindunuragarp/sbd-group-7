@@ -12,7 +12,7 @@ import org.w3c.dom.Document
 import sys.process._
 
 object StreamingMapper {
-  val streamBatchSize = 1000
+  val streamBatchSize = 500
   val streamBatchInterval = 100 //milliseconds
 
 
@@ -167,6 +167,8 @@ object StreamingMapper {
     // Sorts file by name to properly get first and second fastq file
     // Assumes there are only two fastq file in the directory and it is named ***1.fastq and ***2.fastq
     val files = dir.listFiles().sortBy(x => x.getName)
+    println("File 1 = " + files(0).getAbsolutePath)
+    println("File 2 = " + files(1).getAbsolutePath)
 
     // Custom iterator to read valid inputs based on fastq format
     val file1 = new FastqIterator(files(0))
