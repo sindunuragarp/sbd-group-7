@@ -368,15 +368,10 @@ object DNASeqAnalyzer {
 
     /*************************************/
 
-    // (texts)
+    // (name, index, region, variants)
     val vardensity = sc
       .textFile(varFolder + VarDensityFileName)
       .map(x => textToVariantData(x))
-
-    // (index, variants)
-    val chromosomeVariant = vardensity
-      .map(x => (x._2, x._4))
-      .reduceByKey(_ + _)
 
     /*************************************/
 
@@ -391,20 +386,13 @@ object DNASeqAnalyzer {
       .persist(MEMORY_ONLY_SER) //cache
     bwaResults.setName("rdd_bwaResults")
 
-    // (chromosome number, total number of SAM records)
+    // (total number of SAM records, chromosome number)
     val loadPerChromosome = bwaResults
       .map { case (key, values) => (values.length, key) }
-      .map(x => (x._2, x._1))
-
-    // (new weight, chromosome number)
-    val newLoadPerChromosome = chromosomeVariant
-      .join(loadPerChromosome)
-      .map(x => (x._1, x._2._1.toLong * x._2._2.toLong / 1000000))
-      .map(x => (x._2.toInt, x._1))
-      .collect()
+      .collect
 
     // ([chromosome number])
-    val loadMap = loadBalancer(newLoadPerChromosome, numInstances)
+    val loadMap = loadBalancer(loadPerChromosome, numInstances)
 
     // (instance index, [SAM records])
     val loadBalancedRdd = bwaResults
