@@ -90,6 +90,7 @@ object DNASeqAnalyzer {
     config.initialize()
 
     val numInstances = Integer.parseInt(config.getNumInstances)
+    val numRegions = Integer.parseInt(config.getNumRegions)
     val inputFolder = config.getInputFolder
     val outputFolder = config.getOutputFolder
     val varFolder = config.getVarFolder

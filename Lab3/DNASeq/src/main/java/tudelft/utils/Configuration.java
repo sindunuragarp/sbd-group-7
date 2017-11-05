@@ -38,6 +38,7 @@ public class Configuration implements Serializable
 	private String outputFolder;
 	private String numInstances;
 	private String numThreads;
+	private String numRegions;
 	private double scc;
 	private double sec;
 	private SAMSequenceDictionary dict;
@@ -60,6 +61,7 @@ public class Configuration implements Serializable
 			outputFolder = correctFolderName(document.getElementsByTagName("outputFolder").item(0).getTextContent());
 			numInstances = document.getElementsByTagName("numInstances").item(0).getTextContent();
 			numThreads = document.getElementsByTagName("numThreads").item(0).getTextContent();
+			numRegions = document.getElementsByTagName("numRegions").item(0).getTextContent();
 
 			scc						= 30.0;
 			sec						= 30.0;
@@ -132,6 +134,11 @@ public class Configuration implements Serializable
 	{
 		return numThreads;
 	}
+
+    public String getNumRegions()
+    {
+        return numRegions;
+    }
 	
 	public void setNumInstances(String numInstances)
 	{
@@ -173,6 +180,7 @@ public class Configuration implements Serializable
 		System.out.println("outputFolder:\t" + outputFolder);
 		System.out.println("numInstances:\t" + numInstances);
 		System.out.println("numThreads:\t" + numThreads);
+		System.out.println("numRegions:\t" + numRegions);
 		System.out.println("*************************");
 	}
 }
