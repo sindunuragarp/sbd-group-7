@@ -25,9 +25,9 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
+
   // Splits variant density texts
   def textToVariantData(text: String): (String, Int, Int, Int) = {
-
     val delimitedText = text.split("\\|")
     val name = delimitedText(0)
     val index = delimitedText(1).toInt
@@ -38,8 +38,7 @@ object DNASeqAnalyzer {
   }
 
   // Reads SAM files generated from part 2
-  def bwaRead(x: String): Array[(Int, SAMRecord)] = {
-
+  def readSAM(x: String): Array[(Int, SAMRecord)] = {
     val bwaKeyValues = new BWAKeyValues(x)
     bwaKeyValues.parseSam()
     val kvPairs: Array[(Int, SAMRecord)] = bwaKeyValues.getKeyValuePairs()
@@ -47,32 +46,9 @@ object DNASeqAnalyzer {
     kvPairs
   }
 
-  // Deprecated
-  def bwaRun(x: String, bcconfig: Broadcast[Configuration]): Array[(Int, SAMRecord)] = {
-    val config = bcconfig.value
-    val refFolder = config.getRefFolder
-    val toolsFolder = config.getToolsFolder
-    val numThreads = config.getNumThreads
-    val tmpFolder = config.getTmpFolder
 
-    val inputFile = x
-    val outFileName = tmpFolder + "bwamem" + x.filter(_.isDigit)
-    println(inputFile)
-    println(outFileName)
+  //////////////////////////////////////////////////////////////////////////////
 
-    val command = Seq(toolsFolder + "bwa", "mem", refFolder + RefFileName, "-p", "-t", numThreads, inputFile)
-    println(command)
-    (command #> new File(outFileName)).!
-
-    val bwaKeyValues = new BWAKeyValues(outFileName)
-    bwaKeyValues.parseSam()
-    val kvPairs: Array[(Int, SAMRecord)] = bwaKeyValues.getKeyValuePairs()
-
-    //new File(outFileName).delete
-    Seq("rm", outFileName).!
-
-    kvPairs
-  }
 
   def writeToBAM(fileName: String, samRecordsSorted: Array[SAMRecord], bcconfig: Broadcast[Configuration]): ChromosomeRange = {
     val config = bcconfig.value
@@ -377,7 +353,7 @@ object DNASeqAnalyzer {
 
     // (chromosome number, [SAM records])
     val bwaResults = files
-      .flatMap(files => bwaRead(files.getPath))
+      .flatMap(files => readSAM(files.getPath))
       .combineByKey(
         (sam: SAMRecord) => Array(sam),
         (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
