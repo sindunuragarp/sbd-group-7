@@ -77,6 +77,186 @@ object DNASeqAnalyzer {
       a.getReferenceIndex - b.getReferenceIndex
   }
 
+  def getTimeStamp: String = {
+    "[" + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime) + "] "
+  }
+
+
+  //////////////////////////////////////////////////////////////////////////////
+
+
+  def main(args: Array[String]) {
+    val config = new Configuration()
+    config.initialize()
+
+    val numInstances = Integer.parseInt(config.getNumInstances)
+    val inputFolder = config.getInputFolder
+    val outputFolder = config.getOutputFolder
+    val varFolder = config.getVarFolder
+
+    /*************************************/
+
+    val mode = "local"
+    val conf = new SparkConf().setAppName("DNASeqAnalyzer")
+
+    // For local mode, include the following two lines
+    if (mode == "local") {
+      conf.setMaster("local[" + config.getNumInstances + "]")
+      conf.set("spark.cores.max", config.getNumInstances)
+    }
+    if (mode == "cluster") {
+      // For cluster mode, include the following commented line
+      conf.set("spark.shuffle.blockTransferService", "nio")
+    }
+    //conf.set("spark.rdd.compress", "true")
+
+    /*************************************/
+
+    new File(outputFolder).mkdirs
+    new File(outputFolder + "output.vcf")
+    val sc = new SparkContext(conf)
+    val bcconfig = sc.broadcast(config)
+
+    // Comment these two lines if you want to see more verbose messages from Spark
+    Logger.getLogger("org").setLevel(Level.OFF)
+    Logger.getLogger("akka").setLevel(Level.OFF)
+
+    /*************************************/
+
+    sc.addSparkListener(new SparkListener() {
+      override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
+        bw.write(getTimeStamp + " Spark ApplicationStart: " + applicationStart.appName + "\n")
+        bw.flush
+      }
+
+      override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
+        bw.write(getTimeStamp + " Spark ApplicationEnd: " + applicationEnd.time + "\n")
+        bw.flush
+      }
+
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+        val map = stageCompleted.stageInfo.rddInfos
+        map.foreach(row => {
+          if (row.isCached) {
+            bw.write(getTimeStamp + row.name + ": memsize = " + (row.memSize / 1000000) + "MB, rdd diskSize " +
+              row.diskSize + ", numPartitions = " + row.numPartitions + "-" + row.numCachedPartitions + "\n")
+          }
+          else if (row.name.contains("rdd_")) {
+            bw.write(getTimeStamp + row.name + " processed!\n")
+          }
+          bw.flush
+        })
+      }
+    })
+
+    /*************************************/
+
+    val t0 = System.currentTimeMillis
+
+    val files = sc.parallelize(new File(inputFolder).listFiles, numInstances)
+    files.cache
+
+    println("inputFolder = " + inputFolder + ", list of files = ")
+    files.collect.foreach(x => println(x))
+
+    /*************************************/
+
+    // (name, index, region, variants)
+    val vardensity = sc
+      .textFile(varFolder + VarDensityFileName)
+      .map(x => textToVariantData(x))
+
+    /*************************************/
+
+    // (chromosome number, [SAM records])
+    val bwaResults = files
+      .flatMap(files => readSAM(files.getPath))
+      .combineByKey(
+        (sam: SAMRecord) => Array(sam),
+        (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
+        (acc1: Array[SAMRecord], acc2: Array[SAMRecord]) => acc1 ++ acc2
+      )
+      .persist(MEMORY_ONLY_SER) //cache
+    bwaResults.setName("rdd_bwaResults")
+
+    // (total number of SAM records, chromosome number)
+    val loadPerChromosome = bwaResults
+      .map { case (key, values) => (values.length, key) }
+      .collect
+
+    // ([chromosome number])
+    val loadMap = loadBalancer(loadPerChromosome, numInstances)
+
+    // (instance index, [SAM records])
+    val loadBalancedRdd = bwaResults
+      .map{
+        case(key, values) =>
+        (loadMap.indexWhere((a: ArrayBuffer[Int]) => a.contains(key)), values)
+      }
+      .reduceByKey(_ ++ _)
+    loadBalancedRdd.setName("rdd_loadBalancedRdd")
+
+    val variantCallData = loadBalancedRdd
+      .flatMap {
+        case(key, sams) =>
+        variantCall(key, sams, bcconfig)
+      }
+    variantCallData.setName("rdd_variantCallData")
+
+    val results = variantCallData.combineByKey(
+      (value: (Int, String)) => Array(value),
+      (acc: Array[(Int, String)], value: (Int, String)) => acc :+ value,
+      (acc1: Array[(Int, String)], acc2: Array[(Int, String)]) => acc1 ++ acc2
+    ).cache
+    results.setName("rdd_results")
+
+    /*************************************/
+
+    val fl = new PrintWriter(new File(outputFolder + "output.vcf"))
+    (1 to 24).foreach(i => {
+      println("Writing chrom: " + i.toString)
+
+      val fileDump = results
+        .filter{case(chrom, value) => chrom == i}
+        .flatMap{case(chrom, value) => value}
+        .sortByKey(ascending = true)
+        .map{case(position, line) => line}
+        .collect
+
+      fileDump.toIterator.foreach(line => fl.println(line))
+    })
+
+    /*************************************/
+
+    fl.close()
+    sc.stop()
+    bw.close()
+
+    val et = (System.currentTimeMillis - t0) / 1000
+    println(getTimeStamp + "Execution time: %d mins %d secs".format(et/60, et%60))
+  }
+
+
+  //////////////////////////////////////////////////////////////////////////////
+
+
+  // Runs load balancing among the instances
+  def loadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
+    val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[Int]())
+    val sizes = ArrayBuffer.fill(numTasks)(0)
+
+    weights
+      .sorted
+      .reverse
+      .foreach{case(distance, key) =>
+        val region = sizes.zipWithIndex.min._2
+        sizes(region) += distance
+        results(region) += key
+      }
+
+    results
+  }
+
 
   //////////////////////////////////////////////////////////////////////////////
 
@@ -238,184 +418,5 @@ object DNASeqAnalyzer {
 
     println("steady")
     results.toArray
-  }
-
-
-  //////////////////////////////////////////////////////////////////////////////
-
-  // Runs load balancing among the instances
-  def loadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
-    val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[Int]())
-    val sizes = ArrayBuffer.fill(numTasks)(0)
-
-    weights
-      .sorted
-      .reverse
-      .foreach{case(distance, key) =>
-        val region = sizes.zipWithIndex.min._2
-        sizes(region) += distance
-        results(region) += key
-      }
-
-    results
-  }
-
-  def getTimeStamp: String = {
-    "[" + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime) + "] "
-  }
-
-
-  //////////////////////////////////////////////////////////////////////////////
-
-
-  def main(args: Array[String]) {
-    val config = new Configuration()
-    config.initialize()
-
-    val numInstances = Integer.parseInt(config.getNumInstances)
-    val inputFolder = config.getInputFolder
-    val outputFolder = config.getOutputFolder
-    val varFolder = config.getVarFolder
-
-    /*************************************/
-
-    val mode = "local"
-    val conf = new SparkConf().setAppName("DNASeqAnalyzer")
-
-    // For local mode, include the following two lines
-    if (mode == "local") {
-      conf.setMaster("local[" + config.getNumInstances + "]")
-      conf.set("spark.cores.max", config.getNumInstances)
-    }
-    if (mode == "cluster") {
-      // For cluster mode, include the following commented line
-      conf.set("spark.shuffle.blockTransferService", "nio")
-    }
-    //conf.set("spark.rdd.compress", "true")
-
-    /*************************************/
-
-    new File(outputFolder).mkdirs
-    new File(outputFolder + "output.vcf")
-    val sc = new SparkContext(conf)
-    val bcconfig = sc.broadcast(config)
-
-    // Comment these two lines if you want to see more verbose messages from Spark
-    Logger.getLogger("org").setLevel(Level.OFF)
-    Logger.getLogger("akka").setLevel(Level.OFF)
-
-    /*************************************/
-
-    sc.addSparkListener(new SparkListener() {
-      override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
-        bw.write(getTimeStamp + " Spark ApplicationStart: " + applicationStart.appName + "\n")
-        bw.flush
-      }
-
-      override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
-        bw.write(getTimeStamp + " Spark ApplicationEnd: " + applicationEnd.time + "\n")
-        bw.flush
-      }
-
-      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-        val map = stageCompleted.stageInfo.rddInfos
-        map.foreach(row => {
-          if (row.isCached) {
-            bw.write(getTimeStamp + row.name + ": memsize = " + (row.memSize / 1000000) + "MB, rdd diskSize " +
-              row.diskSize + ", numPartitions = " + row.numPartitions + "-" + row.numCachedPartitions + "\n")
-          }
-          else if (row.name.contains("rdd_")) {
-            bw.write(getTimeStamp + row.name + " processed!\n")
-          }
-          bw.flush
-        })
-      }
-    })
-
-    /*************************************/
-
-    val t0 = System.currentTimeMillis
-
-    val files = sc.parallelize(new File(inputFolder).listFiles, numInstances)
-    files.cache
-
-    println("inputFolder = " + inputFolder + ", list of files = ")
-    files.collect.foreach(x => println(x))
-
-    /*************************************/
-
-    // (name, index, region, variants)
-    val vardensity = sc
-      .textFile(varFolder + VarDensityFileName)
-      .map(x => textToVariantData(x))
-
-    /*************************************/
-
-    // (chromosome number, [SAM records])
-    val bwaResults = files
-      .flatMap(files => readSAM(files.getPath))
-      .combineByKey(
-        (sam: SAMRecord) => Array(sam),
-        (acc: Array[SAMRecord], value: SAMRecord) => acc :+ value,
-        (acc1: Array[SAMRecord], acc2: Array[SAMRecord]) => acc1 ++ acc2
-      )
-      .persist(MEMORY_ONLY_SER) //cache
-    bwaResults.setName("rdd_bwaResults")
-
-    // (total number of SAM records, chromosome number)
-    val loadPerChromosome = bwaResults
-      .map { case (key, values) => (values.length, key) }
-      .collect
-
-    // ([chromosome number])
-    val loadMap = loadBalancer(loadPerChromosome, numInstances)
-
-    // (instance index, [SAM records])
-    val loadBalancedRdd = bwaResults
-      .map{
-        case(key, values) =>
-        (loadMap.indexWhere((a: ArrayBuffer[Int]) => a.contains(key)), values)
-      }
-      .reduceByKey(_ ++ _)
-    loadBalancedRdd.setName("rdd_loadBalancedRdd")
-
-    val variantCallData = loadBalancedRdd
-      .flatMap {
-        case(key, sams) =>
-        variantCall(key, sams, bcconfig)
-      }
-    variantCallData.setName("rdd_variantCallData")
-
-    val results = variantCallData.combineByKey(
-      (value: (Int, String)) => Array(value),
-      (acc: Array[(Int, String)], value: (Int, String)) => acc :+ value,
-      (acc1: Array[(Int, String)], acc2: Array[(Int, String)]) => acc1 ++ acc2
-    ).cache
-    results.setName("rdd_results")
-
-    /*************************************/
-
-    val fl = new PrintWriter(new File(outputFolder + "output.vcf"))
-    (1 to 24).foreach(i => {
-      println("Writing chrom: " + i.toString)
-
-      val fileDump = results
-        .filter{case(chrom, value) => chrom == i}
-        .flatMap{case(chrom, value) => value}
-        .sortByKey(ascending = true)
-        .map{case(position, line) => line}
-        .collect
-
-      fileDump.toIterator.foreach(line => fl.println(line))
-    })
-
-    /*************************************/
-
-    fl.close()
-    sc.stop()
-    bw.close()
-
-    val et = (System.currentTimeMillis - t0) / 1000
-    println(getTimeStamp + "Execution time: %d mins %d secs".format(et/60, et%60))
   }
 }
