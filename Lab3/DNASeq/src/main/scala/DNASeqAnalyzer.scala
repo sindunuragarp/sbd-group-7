@@ -494,11 +494,11 @@ object DNASeqAnalyzer {
 
     // Write Log
     val out = new BufferedWriter(new PrintWriter(outFile))
-    out.write(stdout.mkString)
+    out.write(stdout.mkString("\n"))
     out.close()
 
     val err = new BufferedWriter(new PrintWriter(errFile))
-    err.write(stderr.mkString)
+    err.write(stderr.mkString("\n"))
     err.close()
 
     // Reset string builder
