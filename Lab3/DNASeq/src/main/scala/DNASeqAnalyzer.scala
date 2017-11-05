@@ -171,7 +171,7 @@ object DNASeqAnalyzer {
     println("inputFolder = " + inputFolder + ", list of files = ")
     files.collect.foreach(x => println(x))
 
-    // ((chromosome, region), [reads])
+    // ((chromosome-number, chromosome-region), [sam-record])
     val bwaResults = files
       .flatMap(files => readSAM(files.getPath))
       .map { case (chromosome, reads) =>
@@ -187,45 +187,45 @@ object DNASeqAnalyzer {
 
     /*************************************/// Load Balancing
 
-    // ((chromosome, region), reads)
+    // ((chromosome-number, chromosome-region), sam-record)
     val loadPerRegion = bwaResults
       .map { case (key, values) => (values.length, key) }
       .map { case (length, key) => (key, length) }
 
-    // Maximum reads
+    // Maximum sam record per region
     val maxLoad = loadPerRegion
       .map { case (key, value) => value }
       .max()
 
-    // ((chromosome, region), scaled reads)
+    // ((chromosome-number, chromosome-region), scaled load)
     val scaledLoadPerRegion = loadPerRegion
       .map { case (key, value) => (key, calculateScaledValue(value, maxLoad)) }
 
-    // ((chromosome, region), variants)
+    // ((chromosome-number, chromosome-region), variant)
     val variantData = sc
       .textFile(varFolder + VarDensityFileName)
       .map(text => textToVariantData(text))
       .map { case (index, region, variants) => ((index, region), variants) }
 
-    // Maximum variants
+    // Maximum variant per region
     val maxVariant = variantData
       .map { case (key, value) => value }
       .max()
 
-    // ((chromosome, region), scaled variants)
+    // ((chromosome-number, chromosome-region), scaled variant)
     val scaledVariantData = variantData
       .map { case (key, value) => (key, calculateScaledValue(value, maxVariant)) }
 
-    // ((chromosome, region), weights)
+    // ((chromosome-number, chromosome-region), weight)
     val weightPerRegion = scaledLoadPerRegion
       .join(scaledVariantData)
       .map { case ((index, region), (load, variants)) => ((index, region), load + variants) }
       .collect
 
-    // ([[(chromosome, region)]])
+    // ([[(chromosome-number, chromosome-region)]])
     val loadMap = loadBalancer(weightPerRegion, numRegions)
 
-    // (task, [reads])
+    // (load-balanced-region, [sam-record])
     val loadBalancedRdd = bwaResults
       .map{
         case(key, values) =>
@@ -279,38 +279,20 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
-
-  // Runs load balancing
-  def oldLoadBalancer(weights: Array[(Int, Int)], numTasks: Int): ArrayBuffer[ArrayBuffer[Int]] = {
-    val results = ArrayBuffer.fill(numTasks)(ArrayBuffer[Int]())
-    val sizes = ArrayBuffer.fill(numTasks)(0)
-
-    weights
-      .sorted
-      .reverse
-      .foreach{case(distance, key) =>
-        val region = sizes.zipWithIndex.min._2
-        sizes(region) += distance
-        results(region) += key
-      }
-
-    results
-  }
-
   // Runs load balancing with known variants
   def loadBalancer(weights: Array[((Int, Int), Double)], numRegions: Int): ArrayBuffer[ArrayBuffer[(Int, Int)]] = {
     val results = ArrayBuffer.fill(numRegions)(ArrayBuffer[(Int, Int)]())
     val sizes = ArrayBuffer.fill(numRegions)(0.0)
 
-    // Calculates the load
+    // Calculates total weight
     val totalWeights = weights
       .map(x => x._2)
       .reduce(_ + _)
 
-    // Calculates threshold for each task
+    // Calculates threshold for load balanced region
     val threshold = totalWeights / numRegions
 
-    // Assign region to tasks
+    // Assign chromosome region to load balanced region
     weights
       .sortBy{ case((chromosome, region), weight) => (chromosome, region) }
       .foreach{ case((chromosome, region), weight) =>
