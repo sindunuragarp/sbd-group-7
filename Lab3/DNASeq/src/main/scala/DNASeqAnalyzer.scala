@@ -218,8 +218,8 @@ object DNASeqAnalyzer {
 
     // ((chromosome-number, chromosome-region), weight)
     val weightPerRegion = scaledLoadPerRegion
-      .join(scaledVariantData)
-      .map { case ((index, region), (load, variants)) => ((index, region), load + variants) }
+      .leftOuterJoin(scaledVariantData)
+      .map { case ((index, region), (load, variants)) => ((index, region), load + variants.get) }
       .collect
 
     // ([[(chromosome-number, chromosome-region)]])
