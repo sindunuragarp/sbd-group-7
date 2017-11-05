@@ -14,7 +14,7 @@ import sys.process._
 object StreamingMapper {
   val streamBatchSize = 500
   val streamBatchInterval = 100 //milliseconds
-
+  val exitSignal = "[EOL]"
 
   ////
 
@@ -88,7 +88,7 @@ object StreamingMapper {
     // Create stream and output directories if they don't already exist
     new File(streamDir).mkdirs
     new File(outputDir).mkdirs
-    new File(tmpDir).mkdirs()
+    new File(tmpDir).mkdirs
 
     // Delete contents of stream & output dir
     val streamDirFile = new File(streamDir)
@@ -108,37 +108,59 @@ object StreamingMapper {
       override def run(): Unit = runDriver(inputDir, streamDir, tmpDir)
     }
 
+    // Creates thread for terminating the stream
+    val terminator = new Thread {
+      override def run(): Unit = {
+        ssc.stop(stopSparkContext = true, stopGracefully = true)
+      }
+    }
+
     // Batches text data every interval, and then processes each rdd batch
     ssc.textFileStream("file://" + streamDirFile.getAbsolutePath)
       .foreachRDD(rdd => {
 
         // batch = Array[lines]
-        val batch = rdd.collect()
+        val data = rdd.collect()
+
+        // checks signal
+        val terminate = data.contains(exitSignal)
+        val batch = data.filter(x => !x.equals(exitSignal))
 
         // fastq format from driver is already valid, therefore one read = 4 consequent lines
         val size = batch.length / 4
-        println(s"Processing $size reads")
+        println(s"Received $size reads (${data.length} lines)")
 
-        // Creates tmp gzip file for input to BWA
-        val uuid = UUID.randomUUID()
-        val tmpFile = s"$tmpDir/chunk_$uuid.fq.gz"
-        saveGzip(batch, tmpFile)
+        if (size != 0) {
+          // Creates tmp gzip file for input to BWA
+          val uuid = UUID.randomUUID()
+          val tmpFile = s"$tmpDir/chunk_$uuid.fq.gz"
+          saveGzip(batch, tmpFile)
 
-        // Calls BWA to process tmp file
-        val outFile = s"$outputDir/chunk_$uuid.sam"
-        bwaRun(tmpFile, outFile, bwaPath, refPath, numThreads)
-        new File(tmpFile).delete()
+          // Calls BWA to process tmp file
+          val outFile = s"$outputDir/chunk_$uuid.sam"
+          bwaRun(tmpFile, outFile, bwaPath, refPath, numThreads)
+          new File(tmpFile).delete()
+        }
+
+        // terminates if signal found
+        if (terminate) {
+          println("Terminating stream")
+          terminator.start()
+        }
       })
 
     //////////////////////////////////////////////////////////////////////
 
-    // Starts both streaming context and driver
+    // Starts both streaming context and driver with a delay
     ssc.start()
+    Thread.sleep(1000)
     driver.start()
 
-    // Waits for driver to finish sending all data, and then terminates streaming after timeout
+    // Waits for driver to finish sending all data, and then awaits termination signal
     driver.join()
-    ssc.awaitTerminationOrTimeout(intervalSecs * 5)
+    ssc.awaitTermination()
+    terminator.join()
+    println("Stream terminated")
 
     // Delete temporary directory
     val tmpDirFile = new File(tmpDir)
@@ -161,42 +183,57 @@ object StreamingMapper {
     val dir = new File(inputDir)
     if (!dir.exists() || !dir.isDirectory) {
       println("Input directory doesn't exist!")
-      return
+
+    } else {
+      // Sorts file by name to properly get first and second fastq file
+      // Assumes there are only two fastq file in the directory and it is named ***1.fastq and ***2.fastq
+      val files = dir.listFiles().sortBy(x => x.getName)
+      println("File 1 = " + files(0).getAbsolutePath)
+      println("File 2 = " + files(1).getAbsolutePath)
+
+      // Custom iterator to read valid inputs based on fastq format
+      val file1 = new FastqIterator(files(0))
+      val file2 = new FastqIterator(files(1))
+
+      // Interleaves the file by zipping each subsequent read, and writes the result in small chunks
+      file1.zip(file2)
+        .grouped(streamBatchSize)
+        .zipWithIndex
+        .foreach{case(tuples, index) =>
+
+          // File is written to tmp directory
+          val filename = "stream_fastq_" + index
+          val file = new File(tmpDir + "/" + filename + ".tmp")
+          val bw = new BufferedWriter(new FileWriter(file))
+
+          // Writes the file incrementally on each read
+          tuples.foreach{case(a,b) =>
+            bw.write(a + "\n")
+            bw.write(b + "\n")
+          }
+          bw.close()
+
+          // Moves completed file to stream directory so that it gets detected by the stream
+          file.renameTo(new File(streamDir + "/" + filename + ".txt"))
+
+          // Adds streaming interval to simulate streaming delay
+          Thread.sleep(streamBatchInterval)
+        }
     }
 
-    // Sorts file by name to properly get first and second fastq file
-    // Assumes there are only two fastq file in the directory and it is named ***1.fastq and ***2.fastq
-    val files = dir.listFiles().sortBy(x => x.getName)
-    println("File 1 = " + files(0).getAbsolutePath)
-    println("File 2 = " + files(1).getAbsolutePath)
+    sendExitSignal(tmpDir, streamDir)
+  }
 
-    // Custom iterator to read valid inputs based on fastq format
-    val file1 = new FastqIterator(files(0))
-    val file2 = new FastqIterator(files(1))
+  /*
+   * Creates file with termination signal
+   */
+  def sendExitSignal(tmpDir: String, streamDir: String): Unit = {
+    val file = new File(tmpDir + "/SUCCESS.tmp")
 
-    // Interleaves the file by zipping each subsequent read, and writes the result in small chunks
-    file1.zip(file2)
-      .grouped(streamBatchSize)
-      .zipWithIndex
-      .foreach{case(tuples, index) =>
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(exitSignal + "\n")
+    bw.close()
 
-        // File is written to tmp directory
-        val filename = "stream_fastq_" + index
-        val file = new File(tmpDir + "/" + filename + ".tmp")
-        val bw = new BufferedWriter(new FileWriter(file))
-
-        // Writes the file incrementally on each read
-        tuples.foreach{case(a,b) =>
-          bw.write(a + "\n")
-          bw.write(b + "\n")
-        }
-        bw.close()
-
-        // Moves completed file to stream directory so that it gets detected by the stream
-        file.renameTo(new File(streamDir + "/" + filename + ".txt"))
-
-        // Adds streaming interval to simulate streaming delay
-        Thread.sleep(streamBatchInterval)
-      }
+    file.renameTo(new File(streamDir + "/SUCCESS.txt"))
   }
 }
