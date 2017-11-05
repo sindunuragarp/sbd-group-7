@@ -96,6 +96,7 @@ object DNASeqAnalyzer {
     val inputFolder = config.getInputFolder
     val outputFolder = config.getOutputFolder
     val varFolder = config.getVarFolder
+    val tmpFolder = config.getTmpFolder
 
     /*************************************/
 
@@ -115,8 +116,10 @@ object DNASeqAnalyzer {
 
     /*************************************/
 
+    // Create necessary files
     new File("stdout").mkdirs()
     new File("stderr").mkdirs()
+    new File(tmpFolder).mkdirs()
     new File(outputFolder).mkdirs
     new File(outputFolder + "output.vcf")
 

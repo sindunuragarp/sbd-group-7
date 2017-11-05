@@ -2,7 +2,7 @@
 	<varFolder>/home/sputra/sbd-group-7/Lab3/VarDensity/output/vardensity.txt</varFolder>>
 	<refFolder>/data/spark/ref</refFolder>
 	<toolsFolder>/data/spark/tools</toolsFolder>
-	<tmpFolder>/data/sputra/tmp</tmpFolder>
+	<tmpFolder>tmp</tmpFolder>
 	<inputFolder>/home/sputra/sbd-group-7/Lab3/StreamingMapper/output/samDir</inputFolder>
 	<outputFolder>output</outputFolder> 
 	<numInstances>8</numInstances>
