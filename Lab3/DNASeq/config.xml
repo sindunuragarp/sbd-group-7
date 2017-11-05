@@ -1,5 +1,5 @@
 <configuration>
-	<varFolder>/home/sputra/sbd-group-7/Lab3/VarDensity/vardensity.txt</varFolder>>
+	<varFolder>/home/sputra/sbd-group-7/Lab3/VarDensity/output/vardensity.txt</varFolder>>
 	<refFolder>/data/spark/ref</refFolder>
 	<toolsFolder>/data/spark/tools</toolsFolder>
 	<tmpFolder>/data/sputra/tmp</tmpFolder>
