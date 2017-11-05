@@ -7,5 +7,5 @@
 	<outputFolder>output</outputFolder> 
 	<numInstances>8</numInstances>
 	<numThreads>1</numThreads>
-	<numRegions>8</numRegions>
+	<numRegions>64</numRegions>
 </configuration>
