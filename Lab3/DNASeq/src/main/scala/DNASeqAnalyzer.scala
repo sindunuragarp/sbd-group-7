@@ -113,8 +113,11 @@ object DNASeqAnalyzer {
 
     /*************************************/
 
+    new File("stdout").mkdirs()
+    new File("stderr").mkdirs()
     new File(outputFolder).mkdirs
     new File(outputFolder + "output.vcf")
+
     val sc = new SparkContext(conf)
     val bcconfig = sc.broadcast(config)
 
@@ -274,7 +277,7 @@ object DNASeqAnalyzer {
     // 	help about Scala's process package can be found at http://www.scala-lang.org/api/current/index.html#scala.sys.process.package.
     //	Note that MemString here is -Xmx14336m, and already defined as a constant variable above, and so are reference files' names.
 
-    /*************************************/
+    /*************************************/// Read Input
 
     val samRecordsSorted = samRecords.sortWith{case(first, second) => compareSAMRecords(first, second) < 0}
 
@@ -287,37 +290,43 @@ object DNASeqAnalyzer {
     // SAM records should be sorted by this point
     val chrRange = writeToBAM(p1, samRecordsSorted, bcconfig)
 
-    /*************************************/
+    // Create buffer for logs
+    val stdout = new StringBuilder
+    val stderr = new StringBuilder
 
-    // Picard preprocessing
+    /*************************************/// Picard preprocessing
+
     //	java MemString -jar toolsFolder/CleanSam.jar INPUT=tmpFolder/regionX-p1.bam OUTPUT=tmpFolder/regionX-p2.bam
     var command = Seq("java", MemString, "-jar", toolsFolder + "CleanSam.jar", "INPUT=" + p1, "OUTPUT=" + p2)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("clean_sam", chrRegion, stdout, stderr)
 
     //	java MemString -jar toolsFolder/MarkDuplicates.jar INPUT=tmpFolder/regionX-p2.bam OUTPUT=tmpFolder/regionX-p3.bam
     //		METRICS_FILE=tmpFolder/regionX-p3-metrics.txt
     command = Seq("java", MemString, "-jar", toolsFolder + "MarkDuplicates.jar", "INPUT=" + p2, "OUTPUT=" + p3, "METRICS_FILE=" + p3_metrics)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("mark_dup", chrRegion, stdout, stderr)
 
     //	java MemString -jar toolsFolder/AddOrReplaceReadGroups.jar INPUT=tmpFolder/regionX-p3.bam OUTPUT=tmpFolder/regionX.bam
     //		RGID=GROUP1 RGLB=LIB1 RGPL=ILLUMINA RGPU=UNIT1 RGSM=SAMPLE1
     command = Seq("java", MemString, "-jar", toolsFolder + "AddOrReplaceReadGroups.jar", "INPUT=" + p3, "OUTPUT=" + regionFile, "RGID=GROUP1", "RGLB=LIB1", "RGPL=ILLUMINA", "RGPU=UNIT1", "RGSM=SAMPLE1")
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("read_groups", chrRegion, stdout, stderr)
 
     // 	java MemString -jar toolsFolder/BuildBamIndex.jar INPUT=tmpFolder/regionX.bam
     command = Seq("java", MemString, "-jar", toolsFolder + "BuildBamIndex.jar", "INPUT=" + regionFile)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("bam_index", chrRegion, stdout, stderr)
 
     //	delete tmpFolder/regionX-p1.bam, tmpFolder/regionX-p2.bam, tmpFolder/regionX-p3.bam and tmpFolder/regionX-p3-metrics.txt
     Seq("rm", p1, p2, p3, p3_metrics).!
 
-    /*************************************/
+    /*************************************/// Make region file
 
-    // Make region file
     val tmpBedFile = tmpFolder + s"tmp$chrRegion.bed"
     val bedFile = tmpFolder + s"bed$chrRegion.bed"
 
@@ -328,14 +337,14 @@ object DNASeqAnalyzer {
     chrRange.writeToBedRegionFile(tmpBed.getAbsolutePath)
 
     //	toolsFolder/bedtools intersect -a refFolder/ExomeFileName -b tmpFolder/tmpX.bed -header > tmpFolder/bedX.bed
-    (Seq(toolsFolder + "bedtools", "intersect", "-a", refFolder + ExomeFileName, "-b", tmpBedFile, "-header") #> new File(bedFile)).!
+    command = Seq(toolsFolder + "bedtools", "intersect", "-a", refFolder + ExomeFileName, "-b", tmpBedFile, "-header")
+    (command #> new File(bedFile)).!
 
     //	delete tmpFolder/tmpX.bed
     Seq("rm", tmpBedFile).!
 
-    /*************************************/
+    /*************************************/// Indel Realignment
 
-    // Indel Realignment
     val intervalFile = tmpFolder + s"region$chrRegion.intervals"
     val region2File = tmpFolder + s"region$chrRegion-2.bam"
     val baiFile = tmpFolder + s"region$chrRegion.bai"
@@ -344,20 +353,21 @@ object DNASeqAnalyzer {
     //		-I tmpFolder/regionX.bam -o tmpFolder/regionX.intervals -L tmpFolder/bedX.bed
     command = Seq("java", MemString, "-jar", toolsFolder + "GenomeAnalysisTK.jar", "-T", "RealignerTargetCreator", "-nt", numOfThreads, "-R", refFolder + RefFileName, "-I", regionFile, "-o", intervalFile, "-L", bedFile)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("tc_realigner", chrRegion, stdout, stderr)
 
     //	java MemString -jar toolsFolder/GenomeAnalysisTK.jar -T IndelRealigner -R refFolder/RefFileName -I tmpFolder/regionX.bam
     //		-targetIntervals tmpFolder/regionX.intervals -o tmpFolder/regionX-2.bam -L tmpFolder/bedX.bed
     command = Seq("java", MemString, "-jar", toolsFolder + "GenomeAnalysisTK.jar", "-T", "IndelRealigner", "-R", refFolder + RefFileName, "-I", regionFile, "-targetIntervals", intervalFile, "-o", region2File, "-L", bedFile)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("indel_realigner", chrRegion, stdout, stderr)
 
     //	delete tmpFolder/regionX.bam, tmpFolder/regionX.bai, tmpFolder/regionX.intervals
     Seq("rm", intervalFile, baiFile).! //, intervalFile).!
 
-    /*************************************/
+    /*************************************/// Base quality recalibration
 
-    // Base quality recalibration
     val regionTableFile = tmpFolder + s"region$chrRegion.table"
     val region3File = tmpFolder + s"region$chrRegion-3.bam"
     val bai2File = tmpFolder + s"region$chrRegion-2.bai"
@@ -367,20 +377,21 @@ object DNASeqAnalyzer {
     //		-knownSites refFolder/SnpFileName
     command = Seq("java", MemString, "-jar", toolsFolder + "GenomeAnalysisTK.jar", "-T", "BaseRecalibrator", "-nct", numOfThreads, "-R", refFolder + RefFileName, "-I", region2File, "-o", regionTableFile, "-L", bedFile, "--disable_auto_index_creation_and_locking_when_reading_rods", "-knownSites", refFolder + SnpFileName)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("recalibrator", chrRegion, stdout, stderr)
 
     //	java MemString -jar toolsFolder/GenomeAnalysisTK.jar -T PrintReads -R refFolder/RefFileName -I
     //		tmpFolder/regionX-2.bam -o tmpFolder/regionX-3.bam -BSQR tmpFolder/regionX.table -L tmpFolder/bedX.bed
     command = Seq("java", MemString, "-jar", toolsFolder + "GenomeAnalysisTK.jar", "-T", "PrintReads", "-R", refFolder + RefFileName, "-I", region2File, "-o", region3File, "-BQSR", regionTableFile, "-L", bedFile)
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("print_reads", chrRegion, stdout, stderr)
 
     // delete tmpFolder/regionX-2.bam, tmpFolder/regionX-2.bai, tmpFolder/regionX.table
     Seq("rm", region2File, bai2File, regionTableFile).!
 
-    /*************************************/
+    /*************************************/// Haplotype -> Uses the region bed file
 
-    // Haplotype -> Uses the region bed file
     val vcfFile = tmpFolder + s"region$chrRegion.vcf"
     val bai3File = tmpFolder + s"region$chrRegion-3.bai"
 
@@ -389,14 +400,13 @@ object DNASeqAnalyzer {
     //		--no_cmdline_in_header --disable_auto_index_creation_and_locking_when_reading_rods
     command = Seq("java", MemString, "-jar", toolsFolder + "GenomeAnalysisTK.jar", "-T", "HaplotypeCaller", "-nct", numOfThreads, "-R", refFolder + RefFileName, "-I", region3File, "-o", vcfFile, "-stand_call_conf", "30.0", "-stand_emit_conf", "30.0", "-L", bedFile, "--no_cmdline_in_header", "--disable_auto_index_creation_and_locking_when_reading_rods")
     println(command)
-    command.!
+    command ! ProcessLogger(stdout append _, stderr append _)
+    writeProcessLogs("hap_caller", chrRegion, stdout, stderr)
 
     // delete tmpFolder/regionX-3.bam, tmpFolder/regionX-3.bai, tmpFolder/bedX.bed
-    command = Seq("rm", region3File, bai3File, bedFile)
-    println(command)
-    command.!
+    Seq("rm", region3File, bai3File, bedFile).!
 
-    /*************************************/
+    /*************************************/// Prepare Output
 
     var results = ArrayBuffer[(Int, (Int, String))]()
     val resultFile = Source.fromFile(vcfFile)
@@ -419,5 +429,32 @@ object DNASeqAnalyzer {
 
     println("steady")
     results.toArray
+  }
+
+
+  ////
+
+
+  def writeProcessLogs(processName: String, chrRegion: Int, stdout: StringBuilder, stderr: StringBuilder): Unit = {
+
+    // Prepare file
+    val outFile = new File(s"stdout/$processName/$chrRegion.txt")
+    val errFile = new File(s"stderr/$processName/$chrRegion.txt")
+
+    outFile.getParentFile.mkdirs()
+    errFile.getParentFile.mkdirs()
+
+    // Write Log
+    val out = new BufferedWriter(new PrintWriter(outFile))
+    out.write(stdout.mkString)
+    out.close()
+
+    val err = new BufferedWriter(new PrintWriter(errFile))
+    err.write(stderr.mkString)
+    err.close()
+
+    // Reset string builder
+    stdout.clear()
+    stderr.clear()
   }
 }
