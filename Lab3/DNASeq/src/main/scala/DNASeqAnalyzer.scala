@@ -25,6 +25,9 @@ object DNASeqAnalyzer {
 
   //////////////////////////////////////////////////////////////////////////////
 
+  def positionToRegionData(position: Int): Int = {
+    math.floor(position / 1000000).toInt + 1
+  }
 
   // Splits variant density texts
   def textToVariantData(text: String): (String, Int, Int, Int) = {
@@ -183,10 +186,10 @@ object DNASeqAnalyzer {
       .textFile(varFolder + VarDensityFileName)
       .map(x => textToVariantData(x))
 
-    // ([chromosome number])
+    // ([[chromosome number]])
     val loadMap = oldLoadBalancer(loadPerChromosome, numRegions)
 
-    // (instance index, [SAM records])
+    // (region index, [SAM records])
     val loadBalancedRdd = bwaResults
       .map{
         case(key, values) =>
